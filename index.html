@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 交通組車隊稼動率與地理軌跡優化儀表板</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', 'Microsoft JhengHei', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f3f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        }
+        .header-area {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .upload-box {
+            background-color: #ecf0f1;
+            border: 2px dashed #3498db;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .upload-box input[type="file"] {
+            display: none;
+        }
+        .custom-file-upload {
+            display: inline-block;
+            padding: 12px 25px;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 5px;
+            transition: background 0.2s;
+        }
+        .custom-file-upload:hover { background-color: #2980b9; }
+        
+        .summary-cards {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            gap: 15px;
+        }
+        .card {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            flex: 1;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            border: 1px solid #e1e8ed;
+        }
+        .card h3 { margin: 0 0 8px 0; font-size: 14px; color: #7f8c8d; font-weight: normal; }
+        .card p { margin: 0; font-size: 24px; font-weight: bold; color: #2c3e50; }
+        
+        .main-content {
+            display: flex;
+            gap: 25px;
+            margin-top: 25px;
+        }
+        .left-panel {
+            flex: 1.2;
+            min-width: 0;
+        }
+        .right-panel {
+            flex: 0.8;
+            position: sticky;
+            top: 20px;
+            height: calc(100vh - 80px);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        #map {
+            width: 100%;
+            height: 450px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        
+        .route-timeline-box {
+            background-color: #fcfcfc;
+            border: 1px solid #e1e8ed;
+            border-radius: 10px;
+            padding: 20px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #ecf0f1; }
+        th { background-color: #34495e; color: white; }
+        .clickable-row { cursor: pointer; transition: background 0.15s; }
+        .clickable-row:hover { background-color: #ebf5fb !important; }
+        .active-row { background-color: #d4e6f1 !important; border-left: 5px solid #2980b9; }
+        
+        .highlight-idle { color: #e74c3c; font-weight: bold; }
+        .row-warning { background-color: #fef9e7; }
+        
+        #chartContainer { width: 100%; height: 350px; margin-bottom: 25px; }
+        
+        .timeline-item {
+            border-left: 3px solid #3498db;
+            margin-left: 10px;
+            padding-left: 15px;
+            position: relative;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: #3498db;
+            border-radius: 50%;
+            left: -8px;
+            top: 4px;
+        }
+        .timeline-time { font-weight: bold; color: #2c3e50; }
+        
+        .map-number-icon {
+            background: #2980b9;
+            color: white;
+            border-radius: 50%;
+            border: 2px solid white;
+            text-align: center;
+            font-weight: bold;
+            font-size: 12px;
+            line-height: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-area">
+        <h1>📊 交通組車隊稼動率與地理軌跡優化儀表板</h1>
+        <p style="color: #7f8c8d;">支援 Excel / CSV 檔案直接匯入。點擊下方列表的特定車輛，右側將即時渲染該車當天的地理行進軌跡地圖。</p>
+    </div>
+
+    <div class="upload-box">
+        <label class="custom-file-upload">
+            <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" onchange="importExcel(this)" />
+            📁 點此選擇上傳 SQL 匯出之 Excel / CSV 檔
+        </label>
+        <p id="fileNameDisplay" style="margin-top: 10px; color: #7f8c8d; font-size: 14px;">尚未選擇檔案</p>
+    </div>
+
+    <div class="summary-cards" id="summaryCards" style="display: none;">
+        <div class="card"><h3>出勤總車輛數</h3><p id="totalCars">0 台</p></div>
+        <div class="card"><h3>車隊平均班次跨度</h3><p id="avgSpan">0h 0m</p></div>
+        <div class="card"><h3>車隊平均實際稼動率 (vs 8hr)</h3><p id="avgWorkdayUtil" class="highlight-idle">0%</p></div>
+        <div class="card"><h3>平均每車全日閒置 (8hr基準)</h3><p id="avgInShiftIdle">0h 0m</p></div>
+    </div>
+
+    <div style="display: none;" id="chartHeaderArea">
+        <h2>⏱️ 全車隊碎塊化時間軸對比圖</h2>
+        <div id="chartContainer"><canvas id="idleChart"></canvas></div>
+    </div>
+
+    <div class="main-content" id="mainContent" style="display: none;">
+        <div class="left-panel">
+            <h2>全車隊詳細數據表 <span style="font-size:14px; color:#e67e22; font-weight:normal;">(💡 點選任一列可看地圖軌跡)</span></h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>車輛編號</th>
+                        <th>首趟上車</th>
+                        <th>末趟下車</th>
+                        <th>班次總跨度</th>
+                        <th>實際載客耗時</th>
+                        <th>全日閒置耗時<br><span style="font-size:11px; color:#f39c12;">(8hr - 載客)</span></th>
+                        <th>稼動率 %</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        
+        <div class="right-panel">
+            <h2>🗺️ 車輛地理行進軌跡</h2>
+            <div id="map"></div>
+            
+            <div class="route-timeline-box">
+                <h3 id="timelineTitle" style="margin-top:0; color:#2c3e50;">請點選左側車輛檢視每日行程細節</h3>
+                <div id="timelineContent"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let myChart = null; 
+    let map = null;
+    let mapLayers = []; 
+    let globalCarData = {}; 
+
+    function initMap() {
+        if (map !== null) return;
+        map = L.map('map').setView([22.7575, 121.1456], 11);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+    }
+
+    const geoDatabase = {
+        "馬偕": [22.7575, 121.1456], "榮民": [22.7711, 121.1418], "東榮": [22.7711, 121.1418],
+        "基督教": [22.7594, 121.1492], "聖母": [22.7562, 121.1499], "部東": [22.7538, 121.1528],
+        "台東醫院": [22.7538, 121.1528], "關山慈濟": [23.0456, 121.1633], "東興診所": [23.0478, 121.1622],
+        "延平": [22.9000, 121.0800], "海端": [23.1000, 121.0500], "池上": [23.1254, 121.2191],
+        "關山": [23.0484, 121.1631], "鹿野": [22.9141, 121.1374], "東河": [22.9700, 121.3000],
+        "成功": [23.1000, 121.3700], "太麻里": [22.6200, 121.0000], "金峰": [22.6000, 120.9000],
+        "大武": [22.3500, 120.8900], "達仁": [22.3000, 120.8500], "卑南": [22.7900, 121.0800],
+        "台東市": [22.7560, 121.1500], "臺東市": [22.7560, 121.1500]
+    };
+
+    function getCoords(addressStr) {
+        if(!addressStr) return { name: "台東市區", coords: [22.7560, 121.1500] };
+        for (let key in geoDatabase) {
+            if (addressStr.includes(key)) {
+                return { name: key, coords: geoDatabase[key] };
+            }
+        }
+        return { name: "台東市區", coords: [22.7560, 121.1500] }; 
+    }
+
+    function formatMinutes(totalMinutes) {
+        if (isNaN(totalMinutes) || totalMinutes < 0) return "0h 0m";
+        return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+    }
+
+    function formatTimeHHMM(date) {
+        return date.toLocaleTimeString('zh-TW', {hour: '2-digit', minute:'2-digit', hour12: false});
+    }
+
+    function importExcel(input) {
+        const file = input.files[0];
+        if (!file) return;
+        document.getElementById('fileNameDisplay').innerText = `已載入檔案：${file.name}`;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array', cellDates: true});
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            // 自動將 Excel 第一列轉為 Key 讀取
+            const rows = XLSX.utils.sheet_to_json(firstSheet);
+            parseStandardRows(rows);
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // 解決 CSV 匯出變 46147.34375 數字的問題
+    function parseDateFlexible(val) {
+        if (!val) return new Date("invalid");
+        if (val instanceof Date) return val;
+        
+        let d = new Date(val);
+        if (!isNaN(d.getTime())) return d;
+
+        let num = Number(val);
+        if (!isNaN(num) && num > 10000) {
+            let dateInMs = Math.round((num - 25569) * 86400 * 1000);
+            let tempDate = new Date(dateInMs);
+            let tzOffset = tempDate.getTimezoneOffset() * 60000;
+            return new Date(dateInMs + tzOffset);
+        }
+        return new Date("invalid");
+    }
+
+    function parseStandardRows(rows) {
+        globalCarData = {};
+        let validLines = 0;
+        let globalMinTime = new Date('2099/12/31');
+        let globalMaxTime = new Date('2000/01/01');
+
+        rows.forEach((row) => {
+            let keys = Object.keys(row);
+            let getVal = (possibleNames) => {
+                let key = keys.find(k => possibleNames.some(pn => k.includes(pn)));
+                return key ? row[key] : null;
+            };
+
+            // 抓取標準欄位
+            let carIdRaw = getVal(["車編號", "車號"]);
+            let startTimeRaw = getVal(["上車", "上車時間", "開始"]);
+            let endTimeRaw = getVal(["下車", "下車時間", "結束"]);
+            let locStartRaw = getVal(["上車地點", "起點"]);
+            let locEndRaw = getVal(["下車地點", "迄點"]);
+
+            if (carIdRaw == null || startTimeRaw == null || endTimeRaw == null) return;
+
+            let carId = String(carIdRaw).replace('.0', '').trim();
+            let startTime = parseDateFlexible(startTimeRaw);
+            let endTime = parseDateFlexible(endTimeRaw);
+
+            if(isNaN(startTime.getTime()) || isNaN(endTime.getTime())) return;
+
+            validLines++;
+            if (startTime < globalMinTime) globalMinTime = startTime;
+            if (endTime > globalMaxTime) globalMaxTime = endTime;
+
+            let locStart = locStartRaw ? String(locStartRaw).trim() : "不明地點";
+            let locEnd = locEndRaw ? String(locEndRaw).trim() : "不明地點";
+
+            if (!globalCarData[carId]) {
+                globalCarData[carId] = { trips: [], totalActiveMinutes: 0 };
+            }
+
+            globalCarData[carId].trips.push({
+                start: startTime,
+                end: endTime,
+                fromStr: locStart,
+                toStr: locEnd
+            });
+            globalCarData[carId].totalActiveMinutes += Math.round((endTime - startTime) / 60000);
+        });
+
+        if (validLines === 0) {
+            alert('檔案欄位解析失敗！請確保表頭(第一列)包含「車編號」、「上車」、「下車」等欄位名稱。');
+            return;
+        }
+
+        renderDashboard(globalMinTime, globalMaxTime);
+    }
+
+    function renderDashboard(globalMinTime, globalMaxTime) {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        let totalCarsCount = 0, grandTotalSpan = 0, grandTotalActive = 0, grandTotalIdle8Hr = 0;
+        const workdayMinutes = 480; 
+
+        const sortedCarIds = Object.keys(globalCarData).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+        let activeDataPoints = [], idleDataPoints = [];
+
+        sortedCarIds.forEach(carId => {
+            totalCarsCount++;
+            const trips = globalCarData[carId].trips;
+            trips.sort((a, b) => a.start - b.start);
+
+            const firstStart = trips[0].start;
+            const lastEnd = trips[trips.length - 1].end;
+            const spanMinutes = Math.round((lastEnd - firstStart) / 60000);
+            const idleBasedOn8Hr = Math.max(0, workdayMinutes - globalCarData[carId].totalActiveMinutes);
+            const workdayUtilPercent = Math.round((globalCarData[carId].totalActiveMinutes / workdayMinutes) * 100);
+
+            grandTotalSpan += spanMinutes;
+            grandTotalActive += globalCarData[carId].totalActiveMinutes;
+            grandTotalIdle8Hr += idleBasedOn8Hr;
+
+            const tr = document.createElement('tr');
+            tr.className = "clickable-row";
+            if (workdayUtilPercent < 30) tr.classList.add('row-warning');
+            tr.onclick = function() {
+                document.querySelectorAll('.clickable-row').forEach(r => r.classList.remove('active-row'));
+                tr.classList.add('active-row');
+                drawCarMapAndTimeline(carId);
+            };
+
+            tr.innerHTML = `
+                <td><strong>🚗 ${carId}</strong></td>
+                <td>${formatTimeHHMM(firstStart)}</td>
+                <td>${formatTimeHHMM(lastEnd)}</td>
+                <td>${formatMinutes(spanMinutes)}</td>
+                <td><strong>${formatMinutes(globalCarData[carId].totalActiveMinutes)}</strong></td>
+                <td class="highlight-idle">${formatMinutes(idleBasedOn8Hr)}</td>
+                <td class="${workdayUtilPercent < 30 ? 'highlight-idle' : ''}">${workdayUtilPercent}%</td>
+            `;
+            tbody.appendChild(tr);
+
+            for(let i=0; i<trips.length; i++){
+                activeDataPoints.push({ x: [trips[i].start.getTime(), trips[i].end.getTime()], y: carId });
+                if(i < trips.length - 1 && trips[i].end < trips[i+1].start){
+                    idleDataPoints.push({ x: [trips[i].end.getTime(), trips[i+1].start.getTime()], y: carId });
+                }
+            }
+        });
+
+        document.getElementById('totalCars').innerText = totalCarsCount + ' 台';
+        document.getElementById('avgSpan').innerText = formatMinutes(Math.round(grandTotalSpan / totalCarsCount));
+        document.getElementById('avgWorkdayUtil').innerText = Math.round((grandTotalActive / (totalCarsCount * workdayMinutes)) * 100) + '%';
+        document.getElementById('avgInShiftIdle').innerText = formatMinutes(Math.round(grandTotalIdle8Hr / totalCarsCount));
+
+        document.getElementById('summaryCards').style.display = 'flex';
+        document.getElementById('chartHeaderArea').style.display = 'block';
+        document.getElementById('mainContent').style.display = 'flex';
+        
+        initMap();
+        drawTimelineChart(sortedCarIds, activeDataPoints, idleDataPoints, globalMinTime, globalMaxTime);
+        
+        if(sortedCarIds.length > 0) tbody.firstChild.click();
+    }
+
+    function drawCarMapAndTimeline(carId) {
+        mapLayers.forEach(layer => map.removeLayer(layer));
+        mapLayers = [];
+
+        const trips = globalCarData[carId].trips;
+        const timelineContent = document.getElementById('timelineContent');
+        document.getElementById('timelineTitle').innerText = `🚗 車輛 ${carId} 當日行進動態軌跡`;
+        timelineContent.innerHTML = '';
+
+        let routePoints = [];
+        let stopCounter = 1;
+
+        trips.forEach((trip, idx) => {
+            let startInfo = getCoords(trip.fromStr);
+            let endInfo = getCoords(trip.toStr);
+
+            if (idx === 0) {
+                let m = L.marker(startInfo.coords).addTo(map).bindPopup(`<b>[起點] ${formatTimeHHMM(trip.start)}</b><br>${trip.fromStr}`);
+                mapLayers.push(m);
+                routePoints.push(startInfo.coords);
+            }
+
+            let customIcon = L.divIcon({
+                className: 'map-number-icon',
+                html: stopCounter++,
+                iconSize: [20, 20]
+            });
+            let mEnd = L.marker(endInfo.coords, {icon: customIcon}).addTo(map)
+                        .bindPopup(`<b>[第 ${idx+1} 趟下車] ${formatTimeHHMM(trip.end)}</b><br>迄點: ${trip.toStr}`);
+            mapLayers.push(mEnd);
+            routePoints.push(endInfo.coords);
+
+            let item = document.createElement('div');
+            item.className = 'timeline-item';
+            item.innerHTML = `
+                <span class="timeline-time">${formatTimeHHMM(trip.start)} ~ ${formatTimeHHMM(trip.end)}</span> 
+                (耗時 ${Math.round((trip.end - trip.start)/60000)} 分鐘)<br>
+                <b style="color:#2980b9;">起：</b>${trip.fromStr}<br>
+                <b style="color:#27ae60;">迄：</b>${trip.toStr}
+            `;
+            timelineContent.appendChild(item);
+
+            if (idx < trips.length - 1 && trip.end < trips[idx+1].start) {
+                let idleMins = Math.round((trips[idx+1].start - trip.end)/60000);
+                let idleItem = document.createElement('div');
+                idleItem.className = 'timeline-item';
+                idleItem.style.borderLeft = "3px dashed #e74c3c";
+                idleItem.innerHTML = `
+                    <span class="timeline-time" style="color:#e74c3c;">${formatTimeHHMM(trip.end)} ~ ${formatTimeHHMM(trips[idx+1].start)}</span> 
+                    <span class="highlight-idle">[線上空轉等待 ⏳ ${idleMins} 分鐘]</span>
+                `;
+                timelineContent.appendChild(idleItem);
+            }
+        });
+
+        let polyline = L.polyline(routePoints, {color: '#2980b9', weight: 4, opacity: 0.8, dashArray: '5, 10'}).addTo(map);
+        mapLayers.push(polyline);
+
+        if(routePoints.length > 0) map.fitBounds(polyline.getBounds(), {padding: [40, 40]});
+    }
+
+    function drawTimelineChart(labels, activeData, idleData, minTime, maxTime) {
+        let baseTime = new Date(minTime); baseTime.setMinutes(0);
+        let topTime = new Date(maxTime); topTime.setHours(topTime.getHours() + 1); topTime.setMinutes(0);
+
+        const ctx = document.getElementById('idleChart').getContext('2d');
+        if (myChart) myChart.destroy();
+
+        myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                datasets: [
+                    { label: '載客任務時間', data: activeData, backgroundColor: 'rgba(52, 152, 219, 0.9)' },
+                    { label: '在線空轉等待', data: idleData, backgroundColor: 'rgba(231, 76, 60, 0.75)' }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'hour', displayFormats: { hour: 'HH:mm' } },
+                        min: baseTime.getTime(), max: topTime.getTime()
+                    },
+                    y: { type: 'category', labels: labels }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const start = new Date(context.raw.x[0]);
+                                const end = new Date(context.raw.x[1]);
+                                return `${context.dataset.label}: ${formatTimeHHMM(start)}~${formatTimeHHMM(end)} (${Math.round((end-start)/60000)}分鐘)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
