@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📊 交通組車隊稼動率與地理軌跡 (精確編號與拖曳校正版)</title>
+    <title>📊 交通組車隊稼動率與地理軌跡 (高精度街道引擎版)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -42,8 +42,6 @@
         .interactive-trip:hover { background-color: #f0f4f8; }
         .selected-trip { background-color: #fef5e7 !important; border-left: 5px solid #e67e22 !important; font-weight: bold; }
         .selected-trip::before { background-color: #e67e22 !important; }
-        
-        /* 全新起迄點大頭針樣式 */
         .map-icon-start { background: #2980b9; color: white; border-radius: 50%; border: 2px solid white; text-align: center; font-weight: bold; font-size: 11px; line-height: 22px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
         .map-icon-end { background: #27ae60; color: white; border-radius: 50%; border: 2px solid white; text-align: center; font-weight: bold; font-size: 11px; line-height: 22px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
     </style>
@@ -52,14 +50,14 @@
 
 <div class="container">
     <div class="header-area">
-        <h1>📊 車隊軌跡優化 (精確編號與拖曳校正版)</h1>
-        <p style="color: #7f8c8d;">💡 新增功能：點選右側特定趟次後，可<b>「按住拖曳」</b>地圖上的起迄點，手動修正至正確位置！</p>
+        <h1>📊 交通組車隊稼動率與地理軌跡 (高精度街道引擎版)</h1>
+        <p style="color: #7f8c8d;">💡 升級版地理引擎：支援最長字串優先辨識 (如：中興路二段)。點選右側特定趟次後，可<b>「按住拖曳」</b>地圖起迄點微調位置！</p>
     </div>
 
     <div class="upload-box">
         <label class="custom-file-upload">
             <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" onchange="importExcel(this)" />
-            📁 上傳 SQL 匯出之 Excel / CSV 檔
+            📁 點此上傳 SQL 匯出之 Excel / CSV 檔
         </label>
         <p id="fileNameDisplay" style="margin-top: 10px; color: #7f8c8d; font-size: 14px;">尚未選擇檔案</p>
     </div>
@@ -86,7 +84,7 @@
         </div>
         
         <div class="right-panel">
-            <h2>🗺️ 單車行進軌跡 (含趟次標示)</h2>
+            <h2>🗺️ 單車行進軌跡 (點擊下方單趟可啟動拖曳)</h2>
             <div id="map"></div>
             <div class="route-timeline-box">
                 <h3 id="timelineTitle" style="margin-top:0; color:#2c3e50;">請點選左側車輛</h3>
@@ -109,35 +107,68 @@
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
     }
 
-    // 新增主要幹道與隨機防疊加機制 (Jitter)
-    const geoRules = [
-        { key: "馬偕", coords: [22.7575, 121.1456] }, { key: "榮民", coords: [22.7711, 121.1418] },
+    // 【核心升級】巨型地理字典庫 (涵蓋醫院、主要幹道細分段落、偏鄉聚落)
+    const rawGeoRules = [
+        // 醫院與地標 (最高優先)
+        { key: "馬偕醫院", coords: [22.7575, 121.1456] }, { key: "馬偕", coords: [22.7575, 121.1456] }, 
+        { key: "榮民醫院", coords: [22.7711, 121.1418] }, { key: "榮民", coords: [22.7711, 121.1418] },
         { key: "東榮", coords: [22.7711, 121.1418] }, { key: "基督教", coords: [22.7594, 121.1492] },
         { key: "聖母", coords: [22.7562, 121.1499] }, { key: "部東", coords: [22.7538, 121.1528] },
         { key: "台東醫院", coords: [22.7538, 121.1528] }, { key: "關山慈濟", coords: [23.0456, 121.1633] },
-        { key: "知本", coords: [22.6933, 121.0366] }, { key: "初鹿", coords: [22.8633, 121.0922] },
-        { key: "中興路", coords: [22.7667, 121.1278] }, { key: "更生路", coords: [22.7700, 121.1350] },
-        { key: "中華路", coords: [22.7483, 121.1416] }, { key: "正氣路", coords: [22.7533, 121.1466] },
+        
+        // 台東市區主要幹道與巷弄 (細緻區分)
+        { key: "中興路四段", coords: [22.7800, 121.1000] }, { key: "中興路三段", coords: [22.7730, 121.1050] }, 
+        { key: "中興路二段", coords: [22.7680, 121.1200] }, { key: "中興路一段", coords: [22.7600, 121.1350] },
+        { key: "中興路", coords: [22.7650, 121.1250] }, { key: "勝利街", coords: [22.7610, 121.1450] }, 
+        { key: "光明路", coords: [22.7520, 121.1500] }, { key: "四維路三段", coords: [22.7650, 121.1400] }, 
+        { key: "四維路一段", coords: [22.7550, 121.1550] }, { key: "四維路", coords: [22.7630, 121.1480] }, 
+        { key: "志航路一段", coords: [22.7750, 121.1350] }, { key: "志航路", coords: [22.7750, 121.1350] },
+        { key: "中山路", coords: [22.7530, 121.1490] }, { key: "洛陽街", coords: [22.7650, 121.1430] },
+        { key: "中華路一段", coords: [22.7520, 121.1450] }, { key: "中華路四段", coords: [22.7300, 121.1100] },
+        { key: "中華路", coords: [22.7480, 121.1410] }, { key: "正氣路", coords: [22.7530, 121.1460] },
+        { key: "更生路", coords: [22.7650, 121.1350] }, { key: "更生北路", coords: [22.7900, 121.1100] },
+        { key: "新生路", coords: [22.7580, 121.1420] }, { key: "連航路", coords: [22.7750, 121.1300] },
+        { key: "漢陽", coords: [22.7450, 121.1350] }, { key: "豐谷", coords: [22.7380, 121.1300] },
+        { key: "豐里", coords: [22.7380, 121.1300] }, { key: "開封街", coords: [22.7600, 121.1400] },
+        { key: "浙江路", coords: [22.7620, 121.1460] }, { key: "傳廣路", coords: [22.7630, 121.1430] },
+        
+        // 鄉鎮聚落與偏鄉
+        { key: "知本路", coords: [22.6933, 121.0366] }, { key: "知本", coords: [22.6933, 121.0366] }, 
+        { key: "溫泉村", coords: [22.6950, 121.0150] }, { key: "建農", coords: [22.7233, 121.1066] }, 
+        { key: "建和", coords: [22.7155, 121.0505] }, { key: "初鹿", coords: [22.8633, 121.0922] }, 
+        { key: "泰安", coords: [22.8055, 121.0950] }, { key: "利嘉", coords: [22.7816, 121.0666] }, 
+        { key: "賓朗", coords: [22.8166, 121.0983] }, { key: "美農", coords: [22.8466, 121.0916] }, 
+        { key: "歷坵", coords: [22.5833, 120.9333] }, { key: "嘉蘭", coords: [22.5977, 120.9416] }, 
+        { key: "金崙", coords: [22.5316, 120.9583] }, { key: "武陵", coords: [22.9233, 121.1083] }, 
+        { key: "桃源", coords: [22.8983, 121.0666] }, { key: "紅葉", coords: [22.8933, 121.0500] }, 
+        { key: "都蘭", coords: [22.8752, 121.2263] }, { key: "富岡", coords: [22.7936, 121.1925] },
+
+        // 鄉鎮級距
         { key: "延平", coords: [22.9000, 121.0800] }, { key: "海端", coords: [23.1000, 121.0500] },
         { key: "池上", coords: [23.1254, 121.2191] }, { key: "關山", coords: [23.0484, 121.1631] },
         { key: "鹿野", coords: [22.9141, 121.1374] }, { key: "太麻里", coords: [22.6200, 121.0000] },
         { key: "金峰", coords: [22.6000, 120.9000] }, { key: "大武", coords: [22.3500, 120.8900] },
-        { key: "達仁", coords: [22.3000, 120.8500] }, { key: "卑南", coords: [22.7900, 121.0800] },
+        { key: "達仁", coords: [22.3000, 120.8500] }, { key: "東河", coords: [22.9700, 121.3000] },
+        { key: "卑南", coords: [22.7900, 121.0800] }, 
+
+        // 預設底線防呆
         { key: "台東市", coords: [22.7560, 121.1500] }, { key: "臺東市", coords: [22.7560, 121.1500] }
     ];
+
+    // 【最長字串優先演算法】將字典依照字串長度「由長到短」排序，確保如 "中興路二段" 優先於 "中興路" 被匹配到
+    const geoRules = rawGeoRules.sort((a, b) => b.key.length - a.key.length);
 
     function getCoords(addressStr) {
         if(!addressStr) return { coords: [22.7560, 121.1500] };
         for (let i = 0; i < geoRules.length; i++) {
             if (addressStr.includes(geoRules[i].key)) {
-                // 加入微小偏移，避免相同關鍵字的點完全疊加在一起
+                // 加入微小偏移 (Jitter)，避免同地址重覆疊加無法點擊或拖曳
                 let latJitter = (Math.random() - 0.5) * 0.003;
                 let lngJitter = (Math.random() - 0.5) * 0.003;
                 return { coords: [geoRules[i].coords[0] + latJitter, geoRules[i].coords[1] + lngJitter] };
             }
         }
-        // 如果完全找不到，給一個隨機落在市區範圍的點
-        return { coords: [22.7560 + (Math.random()-0.5)*0.008, 121.1500 + (Math.random()-0.5)*0.008] }; 
+        return { coords: [22.7560 + (Math.random()-0.5)*0.01, 121.1500 + (Math.random()-0.5)*0.01] }; 
     }
 
     function formatMinutes(m) { return isNaN(m)||m<0 ? "0h 0m" : `${Math.floor(m/60)}h ${m%60}m`; }
@@ -146,7 +177,7 @@
     function importExcel(input) {
         const file = input.files[0];
         if (!file) return;
-        document.getElementById('fileNameDisplay').innerText = `已載入：${file.name}`;
+        document.getElementById('fileNameDisplay').innerText = `已載入檔案：${file.name}`;
         const reader = new FileReader();
         reader.onload = function(e) {
             const data = new Uint8Array(e.target.result);
@@ -175,12 +206,13 @@
             let keys = Object.keys(row);
             let getV = names => { let k = keys.find(k => names.some(n => k.includes(n))); return k ? row[k] : null; };
 
-            let carIdRaw = getV(["車編號", "車號"]), startRaw = getV(["上車"]), endRaw = getV(["下車"]);
+            let carIdRaw = getV(["車編號", "車號"]), startRaw = getV(["上車", "出發"]), endRaw = getV(["下車", "抵達"]);
             let locS = getV(["上車地點", "起點"]), locE = getV(["下車地點", "迄點"]), namRaw = getV(["NAM", "個案"]);
 
             if (!carIdRaw || !startRaw || !endRaw) return;
 
-            let carId = String(carIdRaw).replace('.0','').trim(), start = parseDateFlexible(startRaw), end = parseDateFlexible(endRaw);
+            let carId = String(carIdRaw).replace('.0','').trim();
+            let start = parseDateFlexible(startRaw), end = parseDateFlexible(endRaw);
             let nam = namRaw ? String(namRaw).trim() : "未知";
 
             if(isNaN(start.getTime()) || isNaN(end.getTime())) return;
@@ -192,7 +224,7 @@
             globalCarData[carId].activeMins += Math.round((end - start)/60000);
         });
 
-        if(validLines===0){ alert('解析失敗'); return; }
+        if(validLines===0){ alert('解析失敗！請確認檔案欄位名稱是否正確。'); return; }
         renderDashboard(gMin, gMax);
     }
 
@@ -229,15 +261,15 @@
         mapLayers.forEach(l => map.removeLayer(l)); specificTripLayers.forEach(l => map.removeLayer(l));
         mapLayers = []; specificTripLayers = [];
         const trips = globalCarData[id].trips, tl = document.getElementById('timelineContent');
-        document.getElementById('timelineTitle').innerText = `🚗 車輛 ${id} (點擊下方單趟可修正座標)`; tl.innerHTML = '';
+        document.getElementById('timelineTitle').innerText = `🚗 車輛 ${id} (點擊下方單趟並拖曳大頭針可校正位置)`; tl.innerHTML = '';
         let pts = [];
 
         trips.forEach((t, i) => {
             let sInfo = getCoords(t.from), eInfo = getCoords(t.to);
             
-            // 修正 1：明確標出「第 X 趟起」與「第 X 趟迄」
-            let sIcon = L.divIcon({ className:'map-icon-start', html: `${i+1}起`, iconSize:[26,26] });
-            let eIcon = L.divIcon({ className:'map-icon-end', html: `${i+1}迄`, iconSize:[26,26] });
+            // 明確標出「第 X 趟起」與「第 X 趟迄」
+            let sIcon = L.divIcon({ className:'map-icon-start', html: `${i+1}起`, iconSize:[28,28] });
+            let eIcon = L.divIcon({ className:'map-icon-end', html: `${i+1}迄`, iconSize:[28,28] });
 
             let mStart = L.marker(sInfo.coords, {icon: sIcon}).addTo(map).bindPopup(`<b>[第 ${i+1} 趟 - 上車]</b><br>個案: ${t.nam}<br>${t.from}`);
             let mEnd = L.marker(eInfo.coords, {icon: eIcon}).addTo(map).bindPopup(`<b>[第 ${i+1} 趟 - 下車]</b><br>個案: ${t.nam}<br>${t.to}`);
@@ -253,13 +285,12 @@
                 
                 let line = L.polyline([sInfo.coords, eInfo.coords], { color: '#e67e22', weight: 6, opacity: 0.9 }).addTo(map);
                 
-                // 修正 3：加入拖曳修正功能，讓使用者能手動拉到紅框位置
+                // 【可拖曳手動校正】允許調度員直接拖拉地圖上的大頭針，並自動重繪橘色連線
                 let cs = L.marker(sInfo.coords, {icon: sIcon, draggable: true, zIndexOffset: 1000}).addTo(map)
-                    .bindPopup(`<b>[第 ${i+1} 趟 - 上車]</b><br>🎯 位置若不準，請直接拖曳大頭針<br>${t.from}`).openPopup();
+                    .bindPopup(`<b>[第 ${i+1} 趟 - 上車]</b><br>🎯 可按住拖曳此大頭針微調位置<br>${t.from}`).openPopup();
                 let ce = L.marker(eInfo.coords, {icon: eIcon, draggable: true, zIndexOffset: 1000}).addTo(map)
-                    .bindPopup(`<b>[第 ${i+1} 趟 - 下車]</b><br>🎯 位置若不準，請直接拖曳大頭針<br>${t.to}`);
+                    .bindPopup(`<b>[第 ${i+1} 趟 - 下車]</b><br>🎯 可按住拖曳此大頭針微調位置<br>${t.to}`);
                 
-                // 拖曳時連動更新橘色軌跡線
                 cs.on('drag', function(e) { line.setLatLngs([cs.getLatLng(), ce.getLatLng()]); });
                 ce.on('drag', function(e) { line.setLatLngs([cs.getLatLng(), ce.getLatLng()]); });
 
