@@ -3,401 +3,369 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📊 交通組車隊稼動率與地理軌跡 (終極校正版)</title>
+    <title>📊 交通組車隊稼動率與地理軌跡 (精確API連線版)</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <style>
-        body { font-family: 'Segoe UI', 'Microsoft JhengHei', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f3f5; color: #333; margin: 0; padding: 20px; }
-        /* 滿版放大優化 */
-        .container { max-width: 96%; margin: 0 auto; background-color: #fff; padding: 25px; border-radius: 15px; box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
+        body { font-family: 'Segoe UI', 'Microsoft JhengHei', Tahoma, sans-serif; background-color: #f0f3f5; color: #333; margin: 0; padding: 20px; height: 100vh; box-sizing: border-box; overflow: hidden; }
+        .header-section { margin-bottom: 15px; text-align: center; position: relative; }
+        .header-section h2 { margin: 0 0 10px 0; color: #2c3e50; }
+        .file-upload input { padding: 8px 15px; border: 2px dashed #bdc3c7; border-radius: 8px; background: #fff; cursor: pointer; }
+
+        /* 全域載入中遮罩 */
+        #loading-overlay { display: none; position: absolute; top: 10px; right: 20px; background: #f39c12; color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 1000; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        /* 版面：左右分區 */
+        .main-layout { display: flex; gap: 20px; align-items: flex-start; height: calc(100vh - 100px); }
+        .visual-panel { flex: 1.2; display: flex; flex-direction: column; gap: 15px; height: 100%; }
+        #map { flex: 1; border-radius: 8px; border: 1px solid #cbd5e1; z-index: 1; background-color: #e2e8f0; }
         
-        .header-area { text-align: center; margin-bottom: 20px; }
-        .upload-box { background-color: #ecf0f1; border: 2px dashed #3498db; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
-        .custom-file-upload { display: inline-block; padding: 12px 25px; cursor: pointer; background-color: #3498db; color: white; font-size: 16px; font-weight: bold; border-radius: 5px; transition: background 0.2s; }
-        .custom-file-upload:hover { background-color: #2980b9; }
-        .summary-cards { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 15px; }
-        .card { background: #fff; padding: 15px; border-radius: 10px; text-align: center; flex: 1; box-shadow: 0 4px 8px rgba(0,0,0,0.05); border: 1px solid #e1e8ed; }
-        .card h3 { margin: 0 0 8px 0; font-size: 14px; color: #7f8c8d; font-weight: normal; }
-        .card p { margin: 0; font-size: 24px; font-weight: bold; color: #2c3e50; }
+        #trip-info-card { display: none; background: #ffffff; border-radius: 8px; padding: 20px; border: 1px solid #b6c2cf; box-shadow: 0 4px 10px rgba(0,0,0,0.08); animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .list-panel { flex: 1; height: 100%; overflow-y: auto; padding-right: 10px; background: #fff; border-radius: 8px; padding: 15px; border: 1px solid #cbd5e1; }
+
+        /* 手風琴面板 */
+        .vehicle-card { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.04); overflow: hidden; transition: all 0.2s ease; }
+        .vehicle-header { padding: 14px 20px; background-color: #f8fafc; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 16px; user-select: none; transition: background 0.2s; }
+        .vehicle-header:hover { background-color: #edf2f7; }
+        .vehicle-header::after { content: '▼'; font-size: 12px; color: #a0aec0; transition: transform 0.2s ease; }
+        .vehicle-card.active { border-color: #34495e; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .vehicle-card.active .vehicle-header { background-color: #edf2f7; border-bottom: 1px solid #e2e8f0; }
+        .vehicle-card.active .vehicle-header::after { transform: rotate(180deg); color: #34495e; }
+        .vehicle-content { display: none; padding: 15px; background-color: #ffffff; }
+        .vehicle-card.active .vehicle-content { display: block; }
+
+        /* 多軌時間軸 */
+        .timeline-container { position: relative; width: 100%; background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; margin-top: 5px; }
+        .trip-block { position: absolute; border-radius: 4px; background-color: #3498db; color: white; font-size: 11px; text-align: center; line-height: 1.2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 2; border: 1px solid #2980b9; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.1s; }
+        .trip-block:hover { transform: scale(1.02); box-shadow: 0 4px 8px rgba(0,0,0,0.3); z-index: 3; }
+        .idle-block { position: absolute; background-color: rgba(231, 76, 60, 0.1); border-radius: 4px; font-size: 11px; color: #c0392b; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px dashed #e74c3c; z-index: 1; cursor: pointer; transition: background-color 0.2s; }
+        .idle-block:hover { background-color: rgba(231, 76, 60, 0.2); }
+
+        /* 地圖標籤 */
+        .map-label { padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 13px; color: white; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.4); border: 2px solid white; display: inline-block; }
+        .start-label { background-color: #27ae60; transform: translate(-10%, -120%); }
+        .end-label { background-color: #e74c3c; transform: translate(-10%, 20%); }
         
-        /* 左右面板比例調整，讓地圖更大 */
-        .main-content { display: flex; gap: 20px; margin-top: 20px; }
-        .left-panel { flex: 0.9; min-width: 0; }
-        .right-panel { flex: 1.3; position: sticky; top: 15px; height: calc(100vh - 30px); display: flex; flex-direction: column; gap: 15px; }
-        
-        /* 地圖高度大幅增加 (響應式高度) */
-        #map { width: 100%; height: 55vh; min-height: 450px; border-radius: 10px; border: 1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
-        
-        .route-timeline-box { background-color: #fcfcfc; border: 1px solid #e1e8ed; border-radius: 10px; padding: 20px; flex: 1; overflow-y: auto; }
-        table { width: 100%; border-collapse: collapse; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #ecf0f1; font-size: 14px; }
-        th { background-color: #34495e; color: white; position: sticky; top: 0; z-index: 10; }
-        .clickable-row { cursor: pointer; transition: background 0.15s; }
-        .clickable-row:hover { background-color: #ebf5fb !important; }
-        .active-row { background-color: #d4e6f1 !important; border-left: 5px solid #2980b9; }
-        .highlight-idle { color: #e74c3c; font-weight: bold; }
-        #chartContainer { width: 100%; height: 350px; margin-bottom: 25px; }
-        .timeline-item { border-left: 3px solid #3498db; margin-left: 10px; padding: 10px 15px; position: relative; margin-bottom: 10px; font-size: 14px; border-radius: 4px; transition: all 0.2s; }
-        .timeline-item::before { content: ''; position: absolute; width: 12px; height: 12px; background-color: #3498db; border-radius: 50%; left: -8px; top: 14px; }
-        .interactive-trip { cursor: pointer; }
-        .interactive-trip:hover { background-color: #f0f4f8; }
-        .selected-trip { background-color: #fef5e7 !important; border-left: 5px solid #e67e22 !important; font-weight: bold; }
-        .selected-trip::before { background-color: #e67e22 !important; }
-        
-        .map-icon-start { background: #2980b9; color: white; border-radius: 50%; border: 2px solid white; text-align: center; font-weight: bold; font-size: 11px; line-height: 22px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-        .map-icon-end { background: #27ae60; color: white; border-radius: 50%; border: 2px solid white; text-align: center; font-weight: bold; font-size: 11px; line-height: 22px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-        
-        .hosp-tooltip { background-color: rgba(255, 255, 255, 0.95); border: 2px solid #c0392b; color: #c0392b; font-weight: bold; font-size: 13px; padding: 2px 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); white-space: nowrap; }
+        @media (max-width: 1024px) {
+            body { overflow: auto; height: auto; }
+            .main-layout { flex-direction: column; height: auto; }
+            .visual-panel { position: sticky; top: 0; z-index: 10; height: 500px; background: #f0f3f5; padding-bottom: 10px; }
+            .list-panel { overflow-y: visible; }
+        }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="header-area">
-        <h1>📊 交通組車隊稼動率與地理軌跡 (終極校正版)</h1>
-        <p style="color: #7f8c8d;">💡 終極修正：廢除長度排序干擾，確立「醫院/地標 > 街道 > 縣市」的絕對特權階級，並加入空白字元濾除引擎。</p>
-    </div>
-
-    <div class="upload-box">
-        <label class="custom-file-upload">
-            <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" onchange="importExcel(this)" />
-            📁 點此上傳 SQL 匯出之 Excel / CSV 檔
-        </label>
-        <p id="fileNameDisplay" style="margin-top: 10px; color: #7f8c8d; font-size: 14px;">尚未選擇檔案</p>
-    </div>
-
-    <div class="summary-cards" id="summaryCards" style="display: none;">
-        <div class="card"><h3>出勤總車輛數</h3><p id="totalCars">0 台</p></div>
-        <div class="card"><h3>車隊平均班次跨度</h3><p id="avgSpan">0h 0m</p></div>
-        <div class="card"><h3>平均實際稼動率</h3><p id="avgWorkdayUtil" class="highlight-idle">0%</p></div>
-        <div class="card"><h3>平均每車閒置</h3><p id="avgInShiftIdle">0h 0m</p></div>
-    </div>
-
-    <div style="display: none;" id="chartHeaderArea">
-        <div id="chartContainer"><canvas id="idleChart"></canvas></div>
-    </div>
-
-    <div class="main-content" id="mainContent" style="display: none;">
-        <div class="left-panel">
-            <div style="max-height: calc(100vh - 40px); overflow-y: auto;">
-                <table>
-                    <thead>
-                        <tr><th>車編號</th><th>首趟</th><th>末趟</th><th>總跨度</th><th>載客耗時</th><th>閒置</th><th>稼動率</th></tr>
-                    </thead>
-                    <tbody id="tableBody"></tbody>
-                </table>
-            </div>
+    <div class="header-section">
+        <h2>📊 交通組車隊稼動率與地理軌跡</h2>
+        <div id="loading-overlay">⏳ 地圖座標轉換中...</div>
+        <div class="file-upload">
+            <input type="file" id="upload" accept=".csv, .xls, .xlsx" />
+            <span style="font-size: 13px; color: #7f8c8d; margin-left: 10px;">請上傳系統派車紀錄檔</span>
         </div>
-        
-        <div class="right-panel">
-            <h2>🗺️ 單車行進軌跡 (點擊下方單趟可啟動拖曳)</h2>
-            <!-- 放大的地圖 -->
+    </div>
+
+    <div class="main-layout">
+        <div class="visual-panel">
             <div id="map"></div>
-            <div class="route-timeline-box">
-                <h3 id="timelineTitle" style="margin-top:0; color:#2c3e50;">請點選左側車輛</h3>
-                <div id="timelineContent"></div>
+            
+            <div id="trip-info-card">
+                <h4 style="margin: 0 0 12px 0; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; display: inline-block;">🔍 任務詳細資訊</h4>
+                <div id="trip-info-content" style="font-size: 16px; line-height: 1.8; color: #34495e;"></div>
+            </div>
+        </div>
+
+        <div class="list-panel" id="vehicleListContainer">
+            <div style="text-align: center; color: #95a5a6; margin-top: 50px; font-size: 16px;">
+                請先由上方選擇檔案上傳，載入後點擊車號即可展開路徑。
             </div>
         </div>
     </div>
-</div>
 
-<script>
-    let myChart = null; 
-    let map = null;
-    let mapLayers = []; 
-    let specificTripLayers = []; 
-    let globalCarData = {}; 
+    <script>
+        let map;
+        let mapLayerGroup = L.featureGroup();
+        let globalMinTime = null;
+        let globalMaxTime = null;
 
-    // 永久常駐的紅色醫院大頭針資料
-    const hospitalMarkersData = [
-        { name: "台東馬偕醫院", coords: [22.759027, 121.141598] }, 
-        { name: "基督教醫院", coords: [22.7635, 121.1465] },
-        { name: "台東榮民醫院", coords: [22.7844, 121.1119] },
-        { name: "部立台東醫院", coords: [22.7538, 121.1528] },
-        { name: "台東聖母醫院", coords: [22.7562, 121.1499] },
-        { name: "關山慈濟醫院", coords: [23.0456, 121.1633] },
-        { name: "部東成功分院", coords: [23.1025, 121.3786] }
-    ];
-
-    function initMap() {
-        if (map !== null) return;
-        map = L.map('map').setView([22.7590, 121.1450], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
-
-        const hospSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 42">
-            <path d="M16 0C7.163 0 0 7.163 0 16c0 11.2 16 26 16 26s16-14.8 16-26C32 7.163 24.837 0 16 0z" fill="%23c0392b"/>
-            <text x="16" y="23" fill="white" font-size="16" font-weight="bold" font-family="sans-serif" text-anchor="middle">H</text>
-        </svg>`;
-        const hospIcon = L.icon({
-            iconUrl: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(hospSvg),
-            iconSize: [32, 42], iconAnchor: [16, 42], popupAnchor: [0, -42]
-        });
-
-        hospitalMarkersData.forEach(h => {
-            L.marker(h.coords, {icon: hospIcon, zIndexOffset: -100})
-             .addTo(map)
-             .bindTooltip(`<b>${h.name}</b>`, {permanent: true, direction: 'top', offset: [0, -38], className: 'hosp-tooltip'})
-             .bindPopup(`<b>${h.name}</b><br>系統基準參考地標`);
-        });
-    }
-
-    function createCustomPin(colorHex, label, type) {
-        const isStart = type === 'start';
-        const color = colorHex.replace('#', '%23');
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 42">
-            <path d="M16 0C7.163 0 0 7.163 0 16c0 11.2 16 26 16 26s16-14.8 16-26C32 7.163 24.837 0 16 0z" fill="${color}"/>
-            <text x="16" y="18" fill="white" font-size="14" font-weight="bold" font-family="sans-serif" text-anchor="middle">${label}</text>
-            <text x="16" y="29" fill="white" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">${isStart ? '起' : '迄'}</text>
-        </svg>`;
-        return L.icon({
-            iconUrl: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-            iconSize: [32, 42], iconAnchor: [16, 42], popupAnchor: [0, -42]
-        });
-    }
-
-    // 【終極校正：嚴格階級制度，取消自動長度排序，確保「醫院」絕對大於「縣市名稱」】
-    const explicitGeoRules = [
-        // ====== 階級 1：絕對特權地標 (醫院與分院) ======
-        // 確保任何錯字、簡稱都能優先捕捉，且座標完全獨立精準
-        { key: "馬偕醫院", coords: [22.759027, 121.141598] }, 
-        { key: "台東馬偕", coords: [22.759027, 121.141598] }, 
-        { key: "馬階醫院", coords: [22.759027, 121.141598] }, // 攔截常見錯字
-        { key: "馬階", coords: [22.759027, 121.141598] }, 
-        { key: "馬偕", coords: [22.759027, 121.141598] }, 
-        
-        { key: "基督教醫院", coords: [22.7635, 121.1465] }, 
-        { key: "台東基督教", coords: [22.7635, 121.1465] }, 
-        { key: "東基", coords: [22.7635, 121.1465] }, 
-        { key: "基督教", coords: [22.7635, 121.1465] }, 
-
-        { key: "榮民醫院", coords: [22.7844, 121.1119] }, 
-        { key: "台東榮民", coords: [22.7844, 121.1119] }, 
-        { key: "榮總", coords: [22.7844, 121.1119] }, 
-        { key: "東榮", coords: [22.7844, 121.1119] }, 
-        { key: "榮民", coords: [22.7844, 121.1119] },
-
-        { key: "部立台東醫院", coords: [22.7538, 121.1528] }, 
-        { key: "台東醫院", coords: [22.7538, 121.1528] }, 
-        { key: "部東", coords: [22.7538, 121.1528] }, 
-
-        { key: "聖母醫院", coords: [22.7562, 121.1499] }, 
-        { key: "聖母", coords: [22.7562, 121.1499] }, 
-
-        { key: "關山慈濟醫院", coords: [23.0456, 121.1633] }, 
-        { key: "關山慈濟", coords: [23.0456, 121.1633] }, 
-        { key: "關慈", coords: [23.0456, 121.1633] }, 
-
-        { key: "成功分院", coords: [23.1025, 121.3786] }, 
-        
-        // ====== 階級 2：詳細街道 (按長度排避免短字誤判) ======
-        { key: "中興路四段", coords: [22.7800, 121.1000] }, { key: "中興路三段", coords: [22.7730, 121.1050] }, 
-        { key: "中興路二段", coords: [22.7680, 121.1200] }, { key: "中興路一段", coords: [22.7600, 121.1350] },
-        { key: "中興路", coords: [22.7650, 121.1250] }, { key: "四維路三段", coords: [22.7650, 121.1400] }, 
-        { key: "四維路一段", coords: [22.7550, 121.1550] }, { key: "四維路", coords: [22.7630, 121.1480] }, 
-        { key: "志航路一段", coords: [22.7750, 121.1350] }, { key: "志航路", coords: [22.7750, 121.1350] },
-        { key: "中華路四段", coords: [22.7300, 121.1100] }, { key: "中華路三段", coords: [22.7380, 121.1250] },
-        { key: "中華路二段", coords: [22.7450, 121.1350] }, { key: "中華路一段", coords: [22.7520, 121.1450] }, 
-        { key: "中華路", coords: [22.7480, 121.1410] }, { key: "更生北路", coords: [22.7900, 121.1100] },
-        { key: "更生路", coords: [22.7650, 121.1350] }, { key: "勝利街", coords: [22.7610, 121.1450] }, 
-        { key: "光明路", coords: [22.7520, 121.1500] }, { key: "中山路", coords: [22.7530, 121.1490] }, 
-        { key: "洛陽街", coords: [22.7650, 121.1430] }, { key: "正氣路", coords: [22.7530, 121.1460] },
-        { key: "新生路", coords: [22.7580, 121.1420] }, { key: "連航路", coords: [22.7750, 121.1300] },
-        { key: "開封街", coords: [22.7600, 121.1400] }, { key: "浙江路", coords: [22.7620, 121.1460] }, 
-        { key: "傳廣路", coords: [22.7630, 121.1430] }, { key: "合江路", coords: [22.7615, 121.1465] }, 
-        { key: "長沙街", coords: [22.7585, 121.1410] }, { key: "寧波街", coords: [22.7630, 121.1420] }, 
-        { key: "長安街", coords: [22.7590, 121.1450] }, { key: "漢陽", coords: [22.7450, 121.1350] }, 
-        { key: "豐谷", coords: [22.7380, 121.1300] }, { key: "豐里", coords: [22.7380, 121.1300] }, 
-
-        // ====== 階級 3：鄉鎮村落與偏鄉 ======
-        { key: "知本路", coords: [22.6933, 121.0366] }, { key: "知本", coords: [22.6933, 121.0366] }, 
-        { key: "溫泉村", coords: [22.6950, 121.0150] }, { key: "建農", coords: [22.7233, 121.1066] }, 
-        { key: "建和", coords: [22.7155, 121.0505] }, { key: "初鹿", coords: [22.8633, 121.0922] }, 
-        { key: "泰安", coords: [22.8055, 121.0950] }, { key: "利嘉", coords: [22.7816, 121.0666] }, 
-        { key: "賓朗", coords: [22.8166, 121.0983] }, { key: "美農", coords: [22.8466, 121.0916] }, 
-        { key: "歷坵", coords: [22.5833, 120.9333] }, { key: "嘉蘭", coords: [22.5977, 120.9416] }, 
-        { key: "金崙", coords: [22.5316, 120.9583] }, { key: "武陵", coords: [22.9233, 121.1083] }, 
-        { key: "桃源", coords: [22.8983, 121.0666] }, { key: "紅葉", coords: [22.8933, 121.0500] }, 
-        { key: "都蘭", coords: [22.8752, 121.2263] }, { key: "富岡", coords: [22.7936, 121.1925] },
-        { key: "延平", coords: [22.9000, 121.0800] }, { key: "海端", coords: [23.1000, 121.0500] },
-        { key: "池上", coords: [23.1254, 121.2191] }, { key: "關山", coords: [23.0484, 121.1631] },
-        { key: "鹿野", coords: [22.9141, 121.1374] }, { key: "太麻里", coords: [22.6200, 121.0000] },
-        { key: "金峰", coords: [22.6000, 120.9000] }, { key: "大武", coords: [22.3500, 120.8900] },
-        { key: "達仁", coords: [22.3000, 120.8500] }, { key: "東河", coords: [22.9700, 121.3000] },
-        { key: "成功", coords: [23.1000, 121.3700] }, { key: "卑南", coords: [22.7900, 121.0800] }, 
-
-        // ====== 階級 4：最底層防呆 (絕對不能放在前面，否則會吃掉醫院名稱) ======
-        { key: "台東市", coords: [22.7560, 121.1500] }, { key: "臺東市", coords: [22.7560, 121.1500] }
-    ];
-
-    function getCoords(addressStr) {
-        if(!addressStr) return { coords: [22.7560, 121.1500] };
-        
-        // 終極防護 1：把 Excel 裡可能打錯的「隱形空白」全部清掉 (例如 "馬偕 醫院" 變成 "馬偕醫院")
-        let cleanedStr = addressStr.replace(/\s+/g, "");
-
-        // 終極防護 2：按照嚴格順序 (醫院優先) 進行掃描
-        for (let i = 0; i < explicitGeoRules.length; i++) {
-            if (cleanedStr.includes(explicitGeoRules[i].key)) {
-                let latJitter = (Math.random() - 0.5) * 0.0006;
-                let lngJitter = (Math.random() - 0.5) * 0.0006;
-                return { coords: [explicitGeoRules[i].coords[0] + latJitter, explicitGeoRules[i].coords[1] + lngJitter] };
-            }
+        function initMap() {
+            map = L.map('map').setView([22.75, 121.15], 11);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            mapLayerGroup.addTo(map);
         }
-        return { coords: [22.7560 + (Math.random()-0.5)*0.002, 121.1500 + (Math.random()-0.5)*0.002] }; 
-    }
+        initMap();
 
-    function formatMinutes(m) { return isNaN(m)||m<0 ? "0h 0m" : `${Math.floor(m/60)}h ${m%60}m`; }
-    function formatTimeHHMM(d) { return d.toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit', hour12:false}); }
-
-    function importExcel(input) {
-        const file = input.files[0];
-        if (!file) return;
-        document.getElementById('fileNameDisplay').innerText = `已載入檔案：${file.name}`;
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, {type: 'array', cellDates: true});
-            parseStandardRows(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
+        // 核心修正：快取與覆蓋字典，遇到馬偕絕不打 API
+        const coordCache = {
+            "馬偕醫院": [22.751176, 121.140606],
+            "馬偕": [22.751176, 121.140606],
+            "關山慈濟": [23.0483, 121.1825],
+            "部東": [22.7561, 121.1444],
+            "台東醫院": [22.7561, 121.1444],
+            "基督教醫院": [22.7584, 121.1466],
+            "東基": [22.7584, 121.1466],
+            "榮民醫院": [22.7663, 121.1259]
         };
-        reader.readAsArrayBuffer(file);
-    }
 
-    function parseDateFlexible(val) {
-        if (!val) return new Date("invalid");
-        if (val instanceof Date) return val;
-        let num = Number(val);
-        if (!isNaN(num) && num > 10000) {
-            let temp = new Date(Math.round((num - 25569) * 86400 * 1000));
-            return new Date(temp.getTime() + temp.getTimezoneOffset() * 60000);
+        // 核心修正：回歸非同步 (Async) OSM API 查詢，並整合字典
+        async function getCoordinates(address) {
+            if (!address || address === "待命中 (無上車地點)" || address === "待命中 (無下車地點)") return null;
+            let cleanAddr = address.trim().replace('臺', '台');
+            
+            // 1. 先查強迫覆蓋字典 (解決模糊字眼，如馬偕醫院)
+            for(let key in coordCache) {
+                if(cleanAddr.includes(key) && (key === '馬偕' || key === '馬偕醫院' || key === '關山慈濟')) {
+                    return coordCache[key]; // 只要有馬偕，直接強制回傳，不打 API
+                }
+            }
+            if (coordCache[cleanAddr]) return coordCache[cleanAddr];
+
+            // 2. 字典沒有的真實完整地址，呼叫 API (解決跨鄉鎮無點可畫的問題)
+            try {
+                let searchQ = cleanAddr.includes('台東') ? cleanAddr : '台東 ' + cleanAddr;
+                let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQ)}&limit=1`);
+                let data = await res.json();
+                if (data && data.length > 0) {
+                    let coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                    coordCache[cleanAddr] = coords; // 存入快取，避免重複打 API
+                    return coords;
+                }
+            } catch (e) {
+                console.warn("Geocoding failed for:", cleanAddr);
+            }
+            return null; 
         }
-        return new Date(val);
-    }
 
-    function parseStandardRows(rows) {
-        globalCarData = {};
-        let validLines = 0, gMin = new Date('2099/12/31'), gMax = new Date('2000/01/01');
+        function parseExcelDate(serial) {
+            let fractional_day = serial - Math.floor(serial);
+            let total_seconds = Math.floor(86400 * fractional_day);
+            let hours = Math.floor(total_seconds / 3600);
+            let minutes = Math.floor((total_seconds % 3600) / 60);
+            let d = new Date(); 
+            d.setHours(hours, minutes, 0, 0);
+            return d;
+        }
 
-        rows.forEach(row => {
-            let keys = Object.keys(row);
-            let getV = names => { let k = keys.find(k => names.some(n => k.includes(n))); return k ? row[k] : null; };
+        function formatTimeHHMM(date) {
+            let h = date.getHours().toString().padStart(2, '0');
+            let m = date.getMinutes().toString().padStart(2, '0');
+            return `${h}:${m}`;
+        }
 
-            let carIdRaw = getV(["車編號", "車號"]), startRaw = getV(["上車", "出發"]), endRaw = getV(["下車", "抵達"]);
-            let locS = getV(["上車地點", "起點"]), locE = getV(["下車地點", "迄點"]), namRaw = getV(["NAM", "個案"]);
-
-            if (!carIdRaw || !startRaw || !endRaw) return;
-
-            let carId = String(carIdRaw).replace('.0','').trim();
-            let start = parseDateFlexible(startRaw), end = parseDateFlexible(endRaw);
-            let nam = namRaw ? String(namRaw).trim() : "未知";
-
-            if(isNaN(start.getTime()) || isNaN(end.getTime())) return;
-            validLines++;
-            if(start < gMin) gMin = start; if(end > gMax) gMax = end;
-
-            if (!globalCarData[carId]) globalCarData[carId] = { trips: [], activeMins: 0 };
-            globalCarData[carId].trips.push({ start, end, from: locS||"不明", to: locE||"不明", nam });
-            globalCarData[carId].activeMins += Math.round((end - start)/60000);
-        });
-
-        if(validLines===0){ alert('解析失敗！請確認檔案欄位名稱是否正確。'); return; }
-        renderDashboard(gMin, gMax);
-    }
-
-    function renderDashboard(gMin, gMax) {
-        const tbody = document.getElementById('tableBody'); tbody.innerHTML = '';
-        let tCars = 0, gSpan = 0, gAct = 0, gIdle = 0, sorted = Object.keys(globalCarData).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
-        let aPts = [], iPts = [];
-
-        sorted.forEach(id => {
-            tCars++; let trips = globalCarData[id].trips.sort((a,b)=>a.start-b.start);
-            let span = Math.round((trips[trips.length-1].end - trips[0].start)/60000);
-            let idle8 = Math.max(0, 480 - globalCarData[id].activeMins), util = Math.round((globalCarData[id].activeMins/480)*100);
-            gSpan += span; gAct += globalCarData[id].activeMins; gIdle += idle8;
-
-            let tr = document.createElement('tr'); tr.className = "clickable-row";
-            tr.onclick = function() { document.querySelectorAll('.clickable-row').forEach(r=>r.classList.remove('active-row')); tr.classList.add('active-row'); drawCarMapAndTimeline(id); };
-            tr.innerHTML = `<td>🚗 ${id}</td><td>${formatTimeHHMM(trips[0].start)}</td><td>${formatTimeHHMM(trips[trips.length-1].end)}</td><td>${formatMinutes(span)}</td><td><b>${formatMinutes(globalCarData[id].activeMins)}</b></td><td class="highlight-idle">${formatMinutes(idle8)}</td><td>${util}%</td>`;
-            tbody.appendChild(tr);
-
-            for(let i=0; i<trips.length; i++){
-                aPts.push({ x: [trips[i].start.getTime(), trips[i].end.getTime()], y: id, nam: trips[i].nam });
-                if(i < trips.length-1 && trips[i].end < trips[i+1].start) iPts.push({ x: [trips[i].end.getTime(), trips[i+1].start.getTime()], y: id });
-            }
-        });
-
-        document.getElementById('totalCars').innerText = tCars+' 台'; document.getElementById('avgSpan').innerText = formatMinutes(Math.round(gSpan/tCars));
-        document.getElementById('avgWorkdayUtil').innerText = Math.round((gAct/(tCars*480))*100)+'%'; document.getElementById('avgInShiftIdle').innerText = formatMinutes(Math.round(gIdle/tCars));
-        document.getElementById('summaryCards').style.display = 'flex'; document.getElementById('chartHeaderArea').style.display = 'block'; document.getElementById('mainContent').style.display = 'flex';
-        initMap(); drawTimelineChart(sorted, aPts, iPts, gMin, gMax);
-        if(sorted.length>0) tbody.firstChild.click();
-    }
-
-    function drawCarMapAndTimeline(id) {
-        mapLayers.forEach(l => map.removeLayer(l)); specificTripLayers.forEach(l => map.removeLayer(l));
-        mapLayers = []; specificTripLayers = [];
-        const trips = globalCarData[id].trips, tl = document.getElementById('timelineContent');
-        document.getElementById('timelineTitle').innerText = `🚗 車輛 ${id} (點擊下方單趟可啟動拖曳校正)`; tl.innerHTML = '';
-        let pts = [];
-
-        trips.forEach((t, i) => {
-            let sInfo = getCoords(t.from), eInfo = getCoords(t.to);
-            
-            let sIcon = createCustomPin('#2980b9', i+1, 'start');
-            let eIcon = createCustomPin('#27ae60', i+1, 'end');
-
-            let mStart = L.marker(sInfo.coords, {icon: sIcon}).addTo(map).bindPopup(`<b>[第 ${i+1} 趟 - 上車]</b><br>個案: ${t.nam}<br>${t.from}`);
-            let mEnd = L.marker(eInfo.coords, {icon: eIcon}).addTo(map).bindPopup(`<b>[第 ${i+1} 趟 - 下車]</b><br>個案: ${t.nam}<br>${t.to}`);
-            
-            mapLayers.push(mStart, mEnd); pts.push(sInfo.coords, eInfo.coords);
-
-            let item = document.createElement('div'); item.className = 'timeline-item interactive-trip';
-            item.innerHTML = `⏱️ ${formatTimeHHMM(t.start)} ~ ${formatTimeHHMM(t.end)} (${Math.round((t.end-t.start)/60000)}分)<br><b style="color:#e67e22;">👤 第 ${i+1} 趟 | 個案: ${t.nam}</b><br><b style="color:#2980b9;">[起]</b> ${t.from}<br><b style="color:#27ae60;">[迄]</b> ${t.to}`;
-            
-            item.onclick = function() {
-                specificTripLayers.forEach(l => map.removeLayer(l)); specificTripLayers = [];
-                document.querySelectorAll('.interactive-trip').forEach(el => el.classList.remove('selected-trip')); item.classList.add('selected-trip');
+        document.getElementById('upload').addEventListener('change', function(e) {
+            let reader = new FileReader();
+            reader.readAsArrayBuffer(e.target.files[0]);
+            reader.onload = function(e) {
+                let data = new Uint8Array(reader.result);
+                let workbook = XLSX.read(data, {type: 'array'});
+                let sheet = workbook.Sheets[workbook.SheetNames[0]];
+                let json = XLSX.utils.sheet_to_json(sheet);
                 
-                let line = L.polyline([sInfo.coords, eInfo.coords], { color: '#e67e22', weight: 6, opacity: 0.9 }).addTo(map);
-                
-                let cs = L.marker(sInfo.coords, {icon: sIcon, draggable: true, zIndexOffset: 1000}).addTo(map)
-                    .bindPopup(`<b>[第 ${i+1} 趟 - 上車]</b><br>🎯 若對位有落差，請按住拖曳水滴針<br>${t.from}`).openPopup();
-                let ce = L.marker(eInfo.coords, {icon: eIcon, draggable: true, zIndexOffset: 1000}).addTo(map)
-                    .bindPopup(`<b>[第 ${i+1} 趟 - 下車]</b><br>🎯 若對位有落差，請按住拖曳水滴針<br>${t.to}`);
-                
-                cs.on('drag', function(e) { line.setLatLngs([cs.getLatLng(), ce.getLatLng()]); });
-                ce.on('drag', function(e) { line.setLatLngs([cs.getLatLng(), ce.getLatLng()]); });
+                let tripsData = {};
+                globalMinTime = new Date(); globalMinTime.setHours(23, 59, 59);
+                globalMaxTime = new Date(); globalMaxTime.setHours(0, 0, 0);
 
-                specificTripLayers.push(line, cs, ce);
-                map.fitBounds(L.polyline([sInfo.coords, eInfo.coords]).getBounds(), { padding: [50, 50], maxZoom: 15 });
+                json.forEach(row => {
+                    let carId = row['車編號'];
+                    if (!carId) return; 
+                    
+                    let start = parseExcelDate(row['上車']);
+                    let end = parseExcelDate(row['下車']);
+                    let from = row['上車地點'] || "未知地點";
+                    let to = row['下車地點'] || "未知地點";
+                    
+                    if(start < globalMinTime) globalMinTime = start;
+                    if(end > globalMaxTime) globalMaxTime = end;
+
+                    if(!tripsData[carId]) tripsData[carId] = [];
+                    tripsData[carId].push({ start, end, from, to });
+                });
+                
+                renderVehicleList(tripsData);
             };
-            tl.appendChild(item);
+        });
 
-            if (i < trips.length-1 && t.end < trips[i+1].start) {
-                let idle = document.createElement('div'); idle.className = 'timeline-item'; idle.style.borderLeft = "3px dashed #e74c3c";
-                idle.innerHTML = `<span style="color:#e74c3c;">${formatTimeHHMM(t.end)}~${formatTimeHHMM(trips[i+1].start)}</span> <b>[空趟等待 ⏳ ${Math.round((trips[i+1].start-t.end)/60000)}分]</b>`;
-                tl.appendChild(idle);
+        function renderVehicleList(data) {
+            const container = document.getElementById('vehicleListContainer');
+            container.innerHTML = ''; 
+            const totalMs = globalMaxTime - globalMinTime;
+
+            Object.keys(data).sort((a,b) => Number(a) - Number(b)).forEach(carId => {
+                let trips = data[carId];
+                trips.sort((a, b) => a.start - b.start); 
+
+                let card = document.createElement('div');
+                card.className = 'vehicle-card';
+                
+                let header = document.createElement('div');
+                header.className = 'vehicle-header';
+                header.innerHTML = `<span>🚗 車輛編號：<strong style="font-size:18px; margin-left:5px;">${carId}</strong></span> <span style="font-size: 14px; color: #7f8c8d;">共 ${trips.length} 趟任務</span>`;
+                
+                let content = document.createElement('div');
+                content.className = 'vehicle-content';
+                
+                let tl = document.createElement('div');
+                tl.className = 'timeline-container';
+                
+                let lanes = []; 
+                let maxEndTimeSoFar = globalMinTime;
+
+                trips.forEach((t, i) => {
+                    let laneIndex = lanes.findIndex(endTime => endTime <= t.start);
+                    if (laneIndex === -1) laneIndex = lanes.length; 
+                    lanes[laneIndex] = t.end;
+                    
+                    let tripDiv = document.createElement('div');
+                    tripDiv.className = 'trip-block';
+                    
+                    let leftPct = ((t.start - globalMinTime) / totalMs) * 100;
+                    let widthPct = ((t.end - t.start) / totalMs) * 100;
+                    
+                    tripDiv.style.left = `${leftPct}%`;
+                    tripDiv.style.width = `${Math.max(widthPct, 1)}%`; 
+                    tripDiv.style.top = `${laneIndex * 35 + 5}px`; 
+                    tripDiv.innerHTML = `${formatTimeHHMM(t.start)}<br>${t.from}`;
+                    tripDiv.title = '點擊查看詳細資訊';
+
+                    if (laneIndex > 0) {
+                        tripDiv.style.backgroundColor = '#9b59b6'; 
+                        tripDiv.style.borderColor = '#8e44ad';
+                    }
+                    
+                    // 點選單一任務 (加上 async)
+                    tripDiv.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        showTripInfoCard(carId, t.start, t.end, t.from, t.to, '載客');
+                        await updateMapWithTrips([t], true); 
+                    });
+
+                    tl.appendChild(tripDiv);
+
+                    // 空趟區塊
+                    if (t.end > maxEndTimeSoFar) maxEndTimeSoFar = t.end;
+                    if (i < trips.length - 1) {
+                        let nextStart = trips[i+1].start;
+                        if (nextStart > maxEndTimeSoFar) {
+                            let idleDiv = document.createElement('div');
+                            idleDiv.className = 'idle-block';
+                            let idleLeft = ((maxEndTimeSoFar - globalMinTime) / totalMs) * 100;
+                            let idleWidth = ((nextStart - maxEndTimeSoFar) / totalMs) * 100;
+                            
+                            idleDiv.style.left = `${idleLeft}%`;
+                            idleDiv.style.width = `${idleWidth}%`;
+                            idleDiv.style.top = '5px';
+                            idleDiv.style.height = `${Math.max(lanes.length, 1) * 35 - 5}px`;
+                            idleDiv.innerHTML = `空趟 ${Math.round((nextStart - maxEndTimeSoFar)/60000)}分`;
+
+                            idleDiv.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                showTripInfoCard(carId, maxEndTimeSoFar, nextStart, '待命中 (無上車地點)', '待命中 (無下車地點)', '空趟');
+                                mapLayerGroup.clearLayers(); 
+                            });
+
+                            tl.appendChild(idleDiv);
+                        }
+                    }
+                });
+
+                tl.style.height = `${Math.max(lanes.length, 1) * 35 + 10}px`;
+                content.appendChild(tl);
+                
+                card.appendChild(header);
+                card.appendChild(content);
+                container.appendChild(card);
+
+                // 點擊展開/收合車輛面板 (加上 async)
+                header.addEventListener('click', async () => {
+                    const isActive = card.classList.contains('active');
+                    document.querySelectorAll('.vehicle-card').forEach(c => c.classList.remove('active'));
+                    
+                    if (!isActive) {
+                        card.classList.add('active'); 
+                        document.getElementById('trip-info-card').style.display = 'none';
+                        
+                        // 滾動與更新地圖
+                        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        await updateMapWithTrips(trips, false); 
+                        map.invalidateSize(); 
+                    } else {
+                        mapLayerGroup.clearLayers();
+                        document.getElementById('trip-info-card').style.display = 'none';
+                    }
+                });
+            });
+        }
+
+        function showTripInfoCard(carId, start, end, from, to, type) {
+            const card = document.getElementById('trip-info-card');
+            const content = document.getElementById('trip-info-content');
+            
+            let color = type === '載客' ? '#3498db' : '#e74c3c';
+            let duration = Math.round((end - start) / 60000);
+            
+            card.style.display = 'block';
+            content.innerHTML = `
+                <strong>🚗 車號：</strong> <span style="font-size:18px;">${carId}</span> <span style="margin-left:10px; padding:3px 10px; border-radius:12px; font-size:13px; background-color:${color}; color:white;">${type}</span><br>
+                <strong style="color:#d35400;">⏰ 時間：</strong> ${formatTimeHHMM(start)} ~ ${formatTimeHHMM(end)} <span style="color:#7f8c8d; font-size:14px;">(約 ${duration} 分鐘)</span><br>
+                <strong style="color:#27ae60;">🟢 上車：</strong> ${from}<br>
+                <strong style="color:#e74c3c;">🔴 下車：</strong> ${to}
+            `;
+        }
+
+        // 核心修正：Async 地圖繪製，並復刻 index-08 全天軌跡連續畫線邏輯
+        async function updateMapWithTrips(trips, isSingleTrip) {
+            const loading = document.getElementById('loading-overlay');
+            loading.style.display = 'block'; // 顯示載入中
+            
+            mapLayerGroup.clearLayers();
+            let pts = []; // 用於收集所有座標點
+            
+            for (let t of trips) {
+                let p1 = await getCoordinates(t.from);
+                let p2 = await getCoordinates(t.to);
+                
+                if (p1 && p2 && p1[0] === p2[0] && p1[1] === p2[1]) {
+                    p2 = [p2[0] - 0.002, p2[1] + 0.002]; 
+                }
+                
+                if (isSingleTrip) {
+                    if (p1 && p2) L.polyline([p1, p2], {color: '#2980b9', weight: 4}).addTo(mapLayerGroup);
+                    
+                    if(p1) {
+                        let startIcon = L.divIcon({ className: '', html: `<div class="map-label start-label">🟢 起: ${t.from.substring(0,8)}...</div>` });
+                        L.marker(p1, {icon: startIcon}).addTo(mapLayerGroup);
+                        pts.push(p1);
+                    }
+                    if(p2) {
+                        let endIcon = L.divIcon({ className: '', html: `<div class="map-label end-label">🔴 訖: ${t.to.substring(0,8)}...</div>` });
+                        L.marker(p2, {icon: endIcon}).addTo(mapLayerGroup);
+                        pts.push(p2);
+                    }
+                } else {
+                    if(p1) { L.circleMarker(p1, {radius: 5, color: '#3498db', fillOpacity: 1}).addTo(mapLayerGroup).bindPopup(`上車: ${t.from}`); pts.push(p1); }
+                    if(p2) { L.circleMarker(p2, {radius: 5, color: '#e74c3c', fillOpacity: 1}).addTo(mapLayerGroup).bindPopup(`下車: ${t.to}`); pts.push(p2); }
+                }
             }
-        });
-        
-        let bgLine = L.polyline(pts, {color: '#34495e', weight: 2, opacity: 0.3, dashArray: '5, 5'}).addTo(map); mapLayers.push(bgLine);
-        if(pts.length>0) map.fitBounds(bgLine.getBounds(), {padding: [30, 30]});
-    }
-
-    function drawTimelineChart(lbls, aPts, iPts, gMin, gMax) {
-        let b = new Date(gMin), t = new Date(gMax); b.setMinutes(0); t.setHours(t.getHours()+1); t.setMinutes(0);
-        if(myChart) myChart.destroy();
-        myChart = new Chart(document.getElementById('idleChart').getContext('2d'), {
-            type: 'bar', data: { datasets: [{ label:'載客', data:aPts, backgroundColor:'rgba(52, 152, 219, 0.9)' }, { label:'空轉', data:iPts, backgroundColor:'rgba(231, 76, 60, 0.75)' }] },
-            options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, scales: { x: {type:'time', time:{unit:'hour', displayFormats:{hour:'HH:mm'}}, min:b.getTime(), max:t.getTime()}, y: {type:'category', labels:lbls} },
-            plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${formatTimeHHMM(new Date(c.raw.x[0]))}~${formatTimeHHMM(new Date(c.raw.x[1]))} ${c.raw.nam?`【案:${c.raw.nam}】`:''}` } } } }
-        });
-    }
-</script>
+            
+            // 復刻 index-08 邏輯：若是看全車行程，將一整天的點串連成連續軌跡線
+            if (!isSingleTrip && pts.length > 1) {
+                L.polyline(pts, {color: '#34495e', weight: 2, opacity: 0.3, dashArray: '5, 5'}).addTo(mapLayerGroup);
+            }
+            
+            if (pts.length > 0) {
+                map.fitBounds(L.polyline(pts).getBounds(), {padding: [60, 60], maxZoom: 14});
+            }
+            
+            loading.style.display = 'none'; // 隱藏載入中
+        }
+    </script>
 </body>
 </html>
