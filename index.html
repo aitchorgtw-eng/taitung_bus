@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📊 交通組車隊稼動率與地理軌跡 (超大視角與精確路網版)</title>
+    <title>📊 交通組車隊稼動率與地理軌跡 (終極校正版)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -60,8 +60,8 @@
 
 <div class="container">
     <div class="header-area">
-        <h1>📊 交通組車隊稼動率與地理軌跡 (超大視角與精確路網版)</h1>
-        <p style="color: #7f8c8d;">💡 已擴展滿版大螢幕顯示、校正馬偕醫院座標，並擴充「合江路、長沙街」等細部路段字典。</p>
+        <h1>📊 交通組車隊稼動率與地理軌跡 (終極校正版)</h1>
+        <p style="color: #7f8c8d;">💡 終極修正：廢除長度排序干擾，確立「醫院/地標 > 街道 > 縣市」的絕對特權階級，並加入空白字元濾除引擎。</p>
     </div>
 
     <div class="upload-box">
@@ -97,6 +97,7 @@
         
         <div class="right-panel">
             <h2>🗺️ 單車行進軌跡 (點擊下方單趟可啟動拖曳)</h2>
+            <!-- 放大的地圖 -->
             <div id="map"></div>
             <div class="route-timeline-box">
                 <h3 id="timelineTitle" style="margin-top:0; color:#2c3e50;">請點選左側車輛</h3>
@@ -113,7 +114,7 @@
     let specificTripLayers = []; 
     let globalCarData = {}; 
 
-    // 台東重點醫院固定常駐座標 (依照使用者指示：修正馬偕經緯度)
+    // 永久常駐的紅色醫院大頭針資料
     const hospitalMarkersData = [
         { name: "台東馬偕醫院", coords: [22.759027, 121.141598] }, 
         { name: "基督教醫院", coords: [22.7635, 121.1465] },
@@ -160,35 +161,60 @@
         });
     }
 
-    // 核心升級：涵蓋醫院、主要幹道與偏鄉聚落的字典庫 (加入合江路等)
-    const rawGeoRules = [
-        { key: "馬偕醫院", coords: [22.759027, 121.141598] }, { key: "馬偕", coords: [22.759027, 121.141598] }, 
-        { key: "基督教醫院", coords: [22.7635, 121.1465] }, { key: "基督教", coords: [22.7635, 121.1465] }, 
+    // 【終極校正：嚴格階級制度，取消自動長度排序，確保「醫院」絕對大於「縣市名稱」】
+    const explicitGeoRules = [
+        // ====== 階級 1：絕對特權地標 (醫院與分院) ======
+        // 確保任何錯字、簡稱都能優先捕捉，且座標完全獨立精準
+        { key: "馬偕醫院", coords: [22.759027, 121.141598] }, 
+        { key: "台東馬偕", coords: [22.759027, 121.141598] }, 
+        { key: "馬階醫院", coords: [22.759027, 121.141598] }, // 攔截常見錯字
+        { key: "馬階", coords: [22.759027, 121.141598] }, 
+        { key: "馬偕", coords: [22.759027, 121.141598] }, 
+        
+        { key: "基督教醫院", coords: [22.7635, 121.1465] }, 
+        { key: "台東基督教", coords: [22.7635, 121.1465] }, 
         { key: "東基", coords: [22.7635, 121.1465] }, 
-        { key: "榮民醫院", coords: [22.7844, 121.1119] }, { key: "榮民", coords: [22.7844, 121.1119] },
-        { key: "東榮", coords: [22.7844, 121.1119] }, { key: "榮總", coords: [22.7844, 121.1119] },
-        { key: "聖母醫院", coords: [22.7562, 121.1499] }, { key: "聖母", coords: [22.7562, 121.1499] }, 
-        { key: "部東", coords: [22.7538, 121.1528] }, { key: "台東醫院", coords: [22.7538, 121.1528] },
-        { key: "關山慈濟", coords: [23.0456, 121.1633] }, { key: "關慈", coords: [23.0456, 121.1633] },
+        { key: "基督教", coords: [22.7635, 121.1465] }, 
+
+        { key: "榮民醫院", coords: [22.7844, 121.1119] }, 
+        { key: "台東榮民", coords: [22.7844, 121.1119] }, 
+        { key: "榮總", coords: [22.7844, 121.1119] }, 
+        { key: "東榮", coords: [22.7844, 121.1119] }, 
+        { key: "榮民", coords: [22.7844, 121.1119] },
+
+        { key: "部立台東醫院", coords: [22.7538, 121.1528] }, 
+        { key: "台東醫院", coords: [22.7538, 121.1528] }, 
+        { key: "部東", coords: [22.7538, 121.1528] }, 
+
+        { key: "聖母醫院", coords: [22.7562, 121.1499] }, 
+        { key: "聖母", coords: [22.7562, 121.1499] }, 
+
+        { key: "關山慈濟醫院", coords: [23.0456, 121.1633] }, 
+        { key: "關山慈濟", coords: [23.0456, 121.1633] }, 
+        { key: "關慈", coords: [23.0456, 121.1633] }, 
+
         { key: "成功分院", coords: [23.1025, 121.3786] }, 
         
+        // ====== 階級 2：詳細街道 (按長度排避免短字誤判) ======
         { key: "中興路四段", coords: [22.7800, 121.1000] }, { key: "中興路三段", coords: [22.7730, 121.1050] }, 
         { key: "中興路二段", coords: [22.7680, 121.1200] }, { key: "中興路一段", coords: [22.7600, 121.1350] },
-        { key: "中興路", coords: [22.7650, 121.1250] }, { key: "勝利街", coords: [22.7610, 121.1450] }, 
-        { key: "光明路", coords: [22.7520, 121.1500] }, { key: "四維路三段", coords: [22.7650, 121.1400] }, 
+        { key: "中興路", coords: [22.7650, 121.1250] }, { key: "四維路三段", coords: [22.7650, 121.1400] }, 
         { key: "四維路一段", coords: [22.7550, 121.1550] }, { key: "四維路", coords: [22.7630, 121.1480] }, 
         { key: "志航路一段", coords: [22.7750, 121.1350] }, { key: "志航路", coords: [22.7750, 121.1350] },
-        { key: "中山路", coords: [22.7530, 121.1490] }, { key: "洛陽街", coords: [22.7650, 121.1430] },
-        { key: "中華路一段", coords: [22.7520, 121.1450] }, { key: "中華路四段", coords: [22.7300, 121.1100] },
-        { key: "中華路", coords: [22.7480, 121.1410] }, { key: "正氣路", coords: [22.7530, 121.1460] },
-        { key: "更生路", coords: [22.7650, 121.1350] }, { key: "更生北路", coords: [22.7900, 121.1100] },
+        { key: "中華路四段", coords: [22.7300, 121.1100] }, { key: "中華路三段", coords: [22.7380, 121.1250] },
+        { key: "中華路二段", coords: [22.7450, 121.1350] }, { key: "中華路一段", coords: [22.7520, 121.1450] }, 
+        { key: "中華路", coords: [22.7480, 121.1410] }, { key: "更生北路", coords: [22.7900, 121.1100] },
+        { key: "更生路", coords: [22.7650, 121.1350] }, { key: "勝利街", coords: [22.7610, 121.1450] }, 
+        { key: "光明路", coords: [22.7520, 121.1500] }, { key: "中山路", coords: [22.7530, 121.1490] }, 
+        { key: "洛陽街", coords: [22.7650, 121.1430] }, { key: "正氣路", coords: [22.7530, 121.1460] },
         { key: "新生路", coords: [22.7580, 121.1420] }, { key: "連航路", coords: [22.7750, 121.1300] },
-        { key: "漢陽", coords: [22.7450, 121.1350] }, { key: "豐谷", coords: [22.7380, 121.1300] },
-        { key: "豐里", coords: [22.7380, 121.1300] }, { key: "開封街", coords: [22.7600, 121.1400] },
-        { key: "浙江路", coords: [22.7620, 121.1460] }, { key: "傳廣路", coords: [22.7630, 121.1430] },
-        { key: "合江路", coords: [22.7615, 121.1465] }, { key: "長沙街", coords: [22.7585, 121.1410] },
-        { key: "寧波街", coords: [22.7630, 121.1420] }, { key: "長安街", coords: [22.7590, 121.1450] }, 
+        { key: "開封街", coords: [22.7600, 121.1400] }, { key: "浙江路", coords: [22.7620, 121.1460] }, 
+        { key: "傳廣路", coords: [22.7630, 121.1430] }, { key: "合江路", coords: [22.7615, 121.1465] }, 
+        { key: "長沙街", coords: [22.7585, 121.1410] }, { key: "寧波街", coords: [22.7630, 121.1420] }, 
+        { key: "長安街", coords: [22.7590, 121.1450] }, { key: "漢陽", coords: [22.7450, 121.1350] }, 
+        { key: "豐谷", coords: [22.7380, 121.1300] }, { key: "豐里", coords: [22.7380, 121.1300] }, 
 
+        // ====== 階級 3：鄉鎮村落與偏鄉 ======
         { key: "知本路", coords: [22.6933, 121.0366] }, { key: "知本", coords: [22.6933, 121.0366] }, 
         { key: "溫泉村", coords: [22.6950, 121.0150] }, { key: "建農", coords: [22.7233, 121.1066] }, 
         { key: "建和", coords: [22.7155, 121.0505] }, { key: "初鹿", coords: [22.8633, 121.0922] }, 
@@ -198,7 +224,6 @@
         { key: "金崙", coords: [22.5316, 120.9583] }, { key: "武陵", coords: [22.9233, 121.1083] }, 
         { key: "桃源", coords: [22.8983, 121.0666] }, { key: "紅葉", coords: [22.8933, 121.0500] }, 
         { key: "都蘭", coords: [22.8752, 121.2263] }, { key: "富岡", coords: [22.7936, 121.1925] },
-
         { key: "延平", coords: [22.9000, 121.0800] }, { key: "海端", coords: [23.1000, 121.0500] },
         { key: "池上", coords: [23.1254, 121.2191] }, { key: "關山", coords: [23.0484, 121.1631] },
         { key: "鹿野", coords: [22.9141, 121.1374] }, { key: "太麻里", coords: [22.6200, 121.0000] },
@@ -206,18 +231,22 @@
         { key: "達仁", coords: [22.3000, 120.8500] }, { key: "東河", coords: [22.9700, 121.3000] },
         { key: "成功", coords: [23.1000, 121.3700] }, { key: "卑南", coords: [22.7900, 121.0800] }, 
 
+        // ====== 階級 4：最底層防呆 (絕對不能放在前面，否則會吃掉醫院名稱) ======
         { key: "台東市", coords: [22.7560, 121.1500] }, { key: "臺東市", coords: [22.7560, 121.1500] }
     ];
 
-    const geoRules = rawGeoRules.sort((a, b) => b.key.length - a.key.length);
-
     function getCoords(addressStr) {
         if(!addressStr) return { coords: [22.7560, 121.1500] };
-        for (let i = 0; i < geoRules.length; i++) {
-            if (addressStr.includes(geoRules[i].key)) {
+        
+        // 終極防護 1：把 Excel 裡可能打錯的「隱形空白」全部清掉 (例如 "馬偕 醫院" 變成 "馬偕醫院")
+        let cleanedStr = addressStr.replace(/\s+/g, "");
+
+        // 終極防護 2：按照嚴格順序 (醫院優先) 進行掃描
+        for (let i = 0; i < explicitGeoRules.length; i++) {
+            if (cleanedStr.includes(explicitGeoRules[i].key)) {
                 let latJitter = (Math.random() - 0.5) * 0.0006;
                 let lngJitter = (Math.random() - 0.5) * 0.0006;
-                return { coords: [geoRules[i].coords[0] + latJitter, geoRules[i].coords[1] + lngJitter] };
+                return { coords: [explicitGeoRules[i].coords[0] + latJitter, explicitGeoRules[i].coords[1] + lngJitter] };
             }
         }
         return { coords: [22.7560 + (Math.random()-0.5)*0.002, 121.1500 + (Math.random()-0.5)*0.002] }; 
