@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📊 交通組車隊稼動率與地理軌跡 (專業圖示與精確醫院版)</title>
+    <title>📊 交通組車隊稼動率與地理軌跡 (超大視角與精確路網版)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -14,54 +14,54 @@
     
     <style>
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f3f5; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 1400px; margin: 0 auto; background-color: #fff; padding: 30px; border-radius: 15px; box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
-        .header-area { text-align: center; margin-bottom: 25px; }
-        .upload-box { background-color: #ecf0f1; border: 2px dashed #3498db; padding: 25px; border-radius: 10px; text-align: center; margin-bottom: 25px; }
+        /* 滿版放大優化 */
+        .container { max-width: 96%; margin: 0 auto; background-color: #fff; padding: 25px; border-radius: 15px; box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
+        
+        .header-area { text-align: center; margin-bottom: 20px; }
+        .upload-box { background-color: #ecf0f1; border: 2px dashed #3498db; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
         .custom-file-upload { display: inline-block; padding: 12px 25px; cursor: pointer; background-color: #3498db; color: white; font-size: 16px; font-weight: bold; border-radius: 5px; transition: background 0.2s; }
         .custom-file-upload:hover { background-color: #2980b9; }
-        .summary-cards { display: flex; justify-content: space-between; margin-bottom: 25px; gap: 15px; }
-        .card { background: #fff; padding: 20px; border-radius: 10px; text-align: center; flex: 1; box-shadow: 0 4px 8px rgba(0,0,0,0.05); border: 1px solid #e1e8ed; }
+        .summary-cards { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 15px; }
+        .card { background: #fff; padding: 15px; border-radius: 10px; text-align: center; flex: 1; box-shadow: 0 4px 8px rgba(0,0,0,0.05); border: 1px solid #e1e8ed; }
         .card h3 { margin: 0 0 8px 0; font-size: 14px; color: #7f8c8d; font-weight: normal; }
         .card p { margin: 0; font-size: 24px; font-weight: bold; color: #2c3e50; }
-        .main-content { display: flex; gap: 25px; margin-top: 25px; }
-        .left-panel { flex: 1.2; min-width: 0; }
-        .right-panel { flex: 0.8; position: sticky; top: 20px; height: calc(100vh - 80px); display: flex; flex-direction: column; gap: 20px; }
-        #map { width: 100%; height: 480px; border-radius: 10px; border: 1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        
+        /* 左右面板比例調整，讓地圖更大 */
+        .main-content { display: flex; gap: 20px; margin-top: 20px; }
+        .left-panel { flex: 0.9; min-width: 0; }
+        .right-panel { flex: 1.3; position: sticky; top: 15px; height: calc(100vh - 30px); display: flex; flex-direction: column; gap: 15px; }
+        
+        /* 地圖高度大幅增加 (響應式高度) */
+        #map { width: 100%; height: 55vh; min-height: 450px; border-radius: 10px; border: 1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        
         .route-timeline-box { background-color: #fcfcfc; border: 1px solid #e1e8ed; border-radius: 10px; padding: 20px; flex: 1; overflow-y: auto; }
         table { width: 100%; border-collapse: collapse; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #ecf0f1; }
-        th { background-color: #34495e; color: white; }
+        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #ecf0f1; font-size: 14px; }
+        th { background-color: #34495e; color: white; position: sticky; top: 0; z-index: 10; }
         .clickable-row { cursor: pointer; transition: background 0.15s; }
         .clickable-row:hover { background-color: #ebf5fb !important; }
         .active-row { background-color: #d4e6f1 !important; border-left: 5px solid #2980b9; }
         .highlight-idle { color: #e74c3c; font-weight: bold; }
         #chartContainer { width: 100%; height: 350px; margin-bottom: 25px; }
-        .timeline-item { border-left: 3px solid #3498db; margin-left: 10px; padding: 10px 15px; position: relative; margin-bottom: 10px; font-size: 13px; border-radius: 4px; transition: all 0.2s; }
+        .timeline-item { border-left: 3px solid #3498db; margin-left: 10px; padding: 10px 15px; position: relative; margin-bottom: 10px; font-size: 14px; border-radius: 4px; transition: all 0.2s; }
         .timeline-item::before { content: ''; position: absolute; width: 12px; height: 12px; background-color: #3498db; border-radius: 50%; left: -8px; top: 14px; }
         .interactive-trip { cursor: pointer; }
         .interactive-trip:hover { background-color: #f0f4f8; }
         .selected-trip { background-color: #fef5e7 !important; border-left: 5px solid #e67e22 !important; font-weight: bold; }
         .selected-trip::before { background-color: #e67e22 !important; }
         
-        /* 醫院常駐標籤特別樣式 */
-        .hosp-tooltip {
-            background-color: rgba(255, 255, 255, 0.95);
-            border: 2px solid #c0392b;
-            color: #c0392b;
-            font-weight: bold;
-            font-size: 13px;
-            padding: 2px 6px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            white-space: nowrap;
-        }
+        .map-icon-start { background: #2980b9; color: white; border-radius: 50%; border: 2px solid white; text-align: center; font-weight: bold; font-size: 11px; line-height: 22px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .map-icon-end { background: #27ae60; color: white; border-radius: 50%; border: 2px solid white; text-align: center; font-weight: bold; font-size: 11px; line-height: 22px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        
+        .hosp-tooltip { background-color: rgba(255, 255, 255, 0.95); border: 2px solid #c0392b; color: #c0392b; font-weight: bold; font-size: 13px; padding: 2px 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); white-space: nowrap; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="header-area">
-        <h1>📊 交通組車隊稼動率與地理軌跡 (專業圖示與精確醫院版)</h1>
-        <p style="color: #7f8c8d;">💡 已全新掛載常駐「紅色 🏥 醫院地標」，並將路線起迄點升級為專業的「水滴地圖針」以利清楚對位！</p>
+        <h1>📊 交通組車隊稼動率與地理軌跡 (超大視角與精確路網版)</h1>
+        <p style="color: #7f8c8d;">💡 已擴展滿版大螢幕顯示、校正馬偕醫院座標，並擴充「合江路、長沙街」等細部路段字典。</p>
     </div>
 
     <div class="upload-box">
@@ -85,12 +85,14 @@
 
     <div class="main-content" id="mainContent" style="display: none;">
         <div class="left-panel">
-            <table>
-                <thead>
-                    <tr><th>車編號</th><th>首趟</th><th>末趟</th><th>總跨度</th><th>載客耗時</th><th>閒置耗時</th><th>稼動率</th></tr>
-                </thead>
-                <tbody id="tableBody"></tbody>
-            </table>
+            <div style="max-height: calc(100vh - 40px); overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr><th>車編號</th><th>首趟</th><th>末趟</th><th>總跨度</th><th>載客耗時</th><th>閒置</th><th>稼動率</th></tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
         </div>
         
         <div class="right-panel">
@@ -111,9 +113,9 @@
     let specificTripLayers = []; 
     let globalCarData = {}; 
 
-    // 台東七大重點醫院固定常駐座標
+    // 台東重點醫院固定常駐座標 (依照使用者指示：修正馬偕經緯度)
     const hospitalMarkersData = [
-        { name: "台東馬偕醫院", coords: [22.7601, 121.1378] },
+        { name: "台東馬偕醫院", coords: [22.759027, 121.141598] }, 
         { name: "基督教醫院", coords: [22.7635, 121.1465] },
         { name: "台東榮民醫院", coords: [22.7844, 121.1119] },
         { name: "部立台東醫院", coords: [22.7538, 121.1528] },
@@ -124,10 +126,9 @@
 
     function initMap() {
         if (map !== null) return;
-        map = L.map('map').setView([22.7600, 121.1400], 13);
+        map = L.map('map').setView([22.7590, 121.1450], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 
-        // 生成紅色的永久醫院大頭針
         const hospSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 42">
             <path d="M16 0C7.163 0 0 7.163 0 16c0 11.2 16 26 16 26s16-14.8 16-26C32 7.163 24.837 0 16 0z" fill="%23c0392b"/>
             <text x="16" y="23" fill="white" font-size="16" font-weight="bold" font-family="sans-serif" text-anchor="middle">H</text>
@@ -137,7 +138,6 @@
             iconSize: [32, 42], iconAnchor: [16, 42], popupAnchor: [0, -42]
         });
 
-        // 將醫院常駐於地圖最底層，不會被行程刷新清掉
         hospitalMarkersData.forEach(h => {
             L.marker(h.coords, {icon: hospIcon, zIndexOffset: -100})
              .addTo(map)
@@ -146,7 +146,6 @@
         });
     }
 
-    // 動態生成專業「水滴型地圖針」
     function createCustomPin(colorHex, label, type) {
         const isStart = type === 'start';
         const color = colorHex.replace('#', '%23');
@@ -161,9 +160,9 @@
         });
     }
 
-    // 核心升級：涵蓋醫院、主要幹道與偏鄉聚落的字典庫
+    // 核心升級：涵蓋醫院、主要幹道與偏鄉聚落的字典庫 (加入合江路等)
     const rawGeoRules = [
-        { key: "馬偕醫院", coords: [22.7601, 121.1378] }, { key: "馬偕", coords: [22.7601, 121.1378] }, 
+        { key: "馬偕醫院", coords: [22.759027, 121.141598] }, { key: "馬偕", coords: [22.759027, 121.141598] }, 
         { key: "基督教醫院", coords: [22.7635, 121.1465] }, { key: "基督教", coords: [22.7635, 121.1465] }, 
         { key: "東基", coords: [22.7635, 121.1465] }, 
         { key: "榮民醫院", coords: [22.7844, 121.1119] }, { key: "榮民", coords: [22.7844, 121.1119] },
@@ -187,7 +186,9 @@
         { key: "漢陽", coords: [22.7450, 121.1350] }, { key: "豐谷", coords: [22.7380, 121.1300] },
         { key: "豐里", coords: [22.7380, 121.1300] }, { key: "開封街", coords: [22.7600, 121.1400] },
         { key: "浙江路", coords: [22.7620, 121.1460] }, { key: "傳廣路", coords: [22.7630, 121.1430] },
-        
+        { key: "合江路", coords: [22.7615, 121.1465] }, { key: "長沙街", coords: [22.7585, 121.1410] },
+        { key: "寧波街", coords: [22.7630, 121.1420] }, { key: "長安街", coords: [22.7590, 121.1450] }, 
+
         { key: "知本路", coords: [22.6933, 121.0366] }, { key: "知本", coords: [22.6933, 121.0366] }, 
         { key: "溫泉村", coords: [22.6950, 121.0150] }, { key: "建農", coords: [22.7233, 121.1066] }, 
         { key: "建和", coords: [22.7155, 121.0505] }, { key: "初鹿", coords: [22.8633, 121.0922] }, 
@@ -214,7 +215,6 @@
         if(!addressStr) return { coords: [22.7560, 121.1500] };
         for (let i = 0; i < geoRules.length; i++) {
             if (addressStr.includes(geoRules[i].key)) {
-                // 產生微小的防疊加位移 (約30~40公尺)，讓藍綠地圖針不會遮擋住紅色的醫院主地標
                 let latJitter = (Math.random() - 0.5) * 0.0006;
                 let lngJitter = (Math.random() - 0.5) * 0.0006;
                 return { coords: [geoRules[i].coords[0] + latJitter, geoRules[i].coords[1] + lngJitter] };
@@ -319,7 +319,6 @@
         trips.forEach((t, i) => {
             let sInfo = getCoords(t.from), eInfo = getCoords(t.to);
             
-            // 使用專業水滴地圖針 (藍色代表起點，綠色代表迄點)
             let sIcon = createCustomPin('#2980b9', i+1, 'start');
             let eIcon = createCustomPin('#27ae60', i+1, 'end');
 
