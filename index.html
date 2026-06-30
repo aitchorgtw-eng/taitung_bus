@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📊 交通組車隊稼動率與地理軌跡 (全車隊總覽版)</title>
+    <title>📊 交通組車隊稼動率與地理軌跡 (時空雙重搜車版)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -12,7 +12,6 @@
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <style>
-        /* 基礎設定 */
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', Tahoma, sans-serif; background-color: #f0f3f5; color: #333; margin: 0; padding: 20px; min-height: 100vh; overflow-x: hidden; }
         .header-section { margin-bottom: 15px; text-align: center; position: relative; }
         .header-section h2 { margin: 0 0 10px 0; color: #2c3e50; }
@@ -21,17 +20,25 @@
         #loading-overlay { display: none; position: absolute; top: 10px; right: 20px; background: #f39c12; color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 1000; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
 
-        /* ================= 上半部版面 ================= */
-        .main-layout { display: flex; gap: 20px; align-items: flex-start; height: 55vh; min-height: 480px; margin-bottom: 20px; }
+        .main-layout { display: flex; gap: 20px; align-items: flex-start; height: 55vh; min-height: 500px; margin-bottom: 20px; }
         .visual-panel { flex: 1.2; display: flex; flex-direction: column; gap: 15px; height: 100%; }
         #map { flex: 1; border-radius: 8px; border: 1px solid #cbd5e1; z-index: 1; background-color: #e2e8f0; }
         
         #trip-info-card { display: none; background: #ffffff; border-radius: 8px; padding: 20px; border: 1px solid #b6c2cf; box-shadow: 0 4px 10px rgba(0,0,0,0.08); animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-        .list-panel { flex: 1; height: 100%; overflow-y: auto; padding-right: 10px; background: #fff; border-radius: 8px; padding: 15px; border: 1px solid #cbd5e1; }
+        .list-panel-wrapper { flex: 1; display: flex; flex-direction: column; height: 100%; background: #fff; border-radius: 8px; border: 1px solid #cbd5e1; overflow: hidden; }
+        .search-bar { background: #e8f4f8; padding: 12px 15px; border-bottom: 1px solid #b6c2cf; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+        .search-inputs { display: flex; align-items: center; gap: 8px; }
+        .search-inputs input[type="time"] { padding: 6px; border: 1px solid #95a5a6; border-radius: 4px; outline: none; font-size: 14px; }
+        .search-inputs input[type="number"] { padding: 6px; border: 1px solid #95a5a6; border-radius: 4px; outline: none; text-align: center; font-size: 14px; }
+        .btn-search { background: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-search:hover { background: #219a52; }
+        .btn-reset { background: #7f8c8d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-reset:hover { background: #95a5a6; }
+        
+        .list-panel { flex: 1; overflow-y: auto; padding: 15px; }
 
-        /* 車輛面板與時間軸 */
         .vehicle-card { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.04); overflow: hidden; transition: all 0.2s ease; }
         .vehicle-header { padding: 14px 20px; background-color: #f8fafc; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 16px; user-select: none; transition: background 0.2s; }
         .vehicle-header:hover { background-color: #edf2f7; }
@@ -43,7 +50,7 @@
         .vehicle-card.active .vehicle-content { display: block; }
 
         .timeline-container { position: relative; width: 100%; background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; margin-top: 5px; }
-        .trip-block { position: absolute; border-radius: 4px; background-color: #3498db; color: white; font-size: 11px; text-align: center; line-height: 1.2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 2; border: 1px solid #2980b9; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.1s; }
+        .trip-block { position: absolute; border-radius: 4px; background-color: #3498db; color: white; font-size: 11px; text-align: center; line-height: 1.2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 2; border: 1px solid #2980b9; height: 38px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.1s; }
         .trip-block:hover { transform: scale(1.02); box-shadow: 0 4px 8px rgba(0,0,0,0.3); z-index: 3; }
         .idle-block { position: absolute; background-color: rgba(231, 76, 60, 0.1); border-radius: 4px; font-size: 11px; color: #c0392b; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px dashed #e74c3c; z-index: 1; cursor: pointer; transition: background-color 0.2s; }
         .idle-block:hover { background-color: rgba(231, 76, 60, 0.2); }
@@ -52,7 +59,6 @@
         .start-label { background-color: #27ae60; transform: translate(-10%, -120%); }
         .end-label { background-color: #e74c3c; transform: translate(-10%, 20%); }
         
-        /* ================= 下半部儀表板 (新增) ================= */
         .bottom-dashboard { display: none; background: #fff; border-radius: 8px; padding: 20px; border: 1px solid #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         .stats-container { display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
         .stat-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px 25px; text-align: center; min-width: 180px; flex: 1; }
@@ -63,14 +69,14 @@
         @media (max-width: 1024px) {
             .main-layout { flex-direction: column; height: auto; }
             .visual-panel { position: sticky; top: 0; z-index: 10; height: 500px; background: #f0f3f5; padding-bottom: 10px; }
-            .list-panel { overflow-y: visible; }
+            .list-panel-wrapper { overflow: visible; }
         }
     </style>
 </head>
 <body>
 
     <div class="header-section">
-        <h2>📊 交通組車隊稼動率與地理軌跡</h2>
+        <h2>📊 交通組車隊稼動率與地理軌跡 (時空雙重搜車版)</h2>
         <div id="loading-overlay">⏳ 地圖座標定位中...</div>
         <div class="file-upload">
             <input type="file" id="upload" accept=".csv, .xls, .xlsx" />
@@ -87,16 +93,31 @@
             </div>
         </div>
 
-        <div class="list-panel" id="vehicleListContainer">
-            <div style="text-align: center; color: #95a5a6; margin-top: 50px; font-size: 16px;">
-                請先由上方選擇檔案上傳，載入後點擊車號即可展開路徑。
+        <div class="list-panel-wrapper">
+            <div class="search-bar">
+                <div class="search-inputs">
+                    <strong style="color: #2c3e50; font-size: 15px;">🔍 市區空檔：</strong>
+                    <input type="time" id="searchTime" title="請輸入要安插的任務起點時間">
+                    <span style="font-size: 13px; color: #7f8c8d; margin-left: 5px;">需保留</span>
+                    <input type="number" id="bufferMins" value="60" min="10" max="240" style="width: 50px;" title="預估此趟任務會耗時多久">
+                    <span style="font-size: 13px; color: #7f8c8d;">分鐘</span>
+                    
+                    <button class="btn-search" id="btnSearch" style="margin-left: 5px;">篩選</button>
+                    <button class="btn-reset" id="btnReset">還原所有車班</button>
+                </div>
+                <div id="searchResultText" style="font-size: 14px; font-weight: bold; color: #e74c3c;"></div>
+            </div>
+
+            <div class="list-panel" id="vehicleListContainer">
+                <div style="text-align: center; color: #95a5a6; margin-top: 50px; font-size: 16px;">
+                    請先由上方選擇檔案上傳，載入後即可查看車輛與查找空檔。
+                </div>
             </div>
         </div>
     </div>
 
     <div class="bottom-dashboard" id="bottom-dashboard">
-        <div class="stats-container" id="statsContainer">
-            </div>
+        <div class="stats-container" id="statsContainer"></div>
         <h3 style="margin-top: 5px; color: #2c3e50; text-align: center; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px;">📈 全車隊碎塊化時間軸對比圖</h3>
         <div class="global-chart-container">
             <canvas id="globalChart"></canvas>
@@ -108,7 +129,8 @@
         let mapLayerGroup = L.featureGroup();
         let globalMinTime = null;
         let globalMaxTime = null;
-        let globalChartInstance = null; // Chart.js 實例
+        let globalChartInstance = null; 
+        let allTripsData = null; 
 
         function initMap() {
             map = L.map('map').setView([22.75, 121.15], 11);
@@ -127,7 +149,9 @@
             "東基": [22.7584, 121.1466],
             "基督教醫院": [22.7584, 121.1466],
             "榮民醫院": [22.776101, 121.119543], 
-            "榮院": [22.776101, 121.119543]
+            "榮院": [22.776101, 121.119543],
+            "東興診所": [22.7638, 121.1432], 
+            "東興內科": [22.7638, 121.1432]  
         };
 
         const fuzzyMatches = {
@@ -179,7 +203,6 @@
                     return fuzzyMatches[key];
                 }
             }
-
             return null; 
         }
 
@@ -220,17 +243,108 @@
                     let end = parseExcelDate(row['下車']);
                     let from = row['上車地點'] || "未知地點";
                     let to = row['下車地點'] || "未知地點";
+                    let namRaw = row['NAM'] || row['個案'] || row['個案編號'];
+                    let nam = namRaw ? String(namRaw).trim() : "未標示";
                     
                     if(start < globalMinTime) globalMinTime = start;
                     if(end > globalMaxTime) globalMaxTime = end;
 
                     if(!tripsData[carId]) tripsData[carId] = [];
-                    tripsData[carId].push({ start, end, from, to });
+                    tripsData[carId].push({ start, end, from, to, nam });
                 });
                 
-                renderVehicleList(tripsData);
-                renderGlobalDashboard(tripsData); // ★ 新增呼叫下半部儀表板
+                allTripsData = tripsData;
+                
+                document.getElementById('searchResultText').innerHTML = '';
+                document.getElementById('searchTime').value = '';
+                renderVehicleList(allTripsData);
+                renderGlobalDashboard(allTripsData); 
             };
+        });
+
+        // ========================================================
+        // ★ 核心升級：時空雙重過濾 (時間窗重疊 + 空間防呆)
+        // ========================================================
+        document.getElementById('btnSearch').addEventListener('click', () => {
+            if (!allTripsData) {
+                alert('請先上傳派車紀錄檔！');
+                return;
+            }
+            
+            let timeInput = document.getElementById('searchTime').value;
+            let bufferMins = parseInt(document.getElementById('bufferMins').value, 10);
+            
+            if (!timeInput) {
+                alert('請先輸入想要安插的任務起點時間 (例如 10:10)');
+                return;
+            }
+            if (isNaN(bufferMins) || bufferMins <= 0) bufferMins = 60; 
+
+            let [h, m] = timeInput.split(':');
+            let searchStart = new Date();
+            searchStart.setHours(h, m, 0, 0);
+            let searchEnd = new Date(searchStart.getTime() + bufferMins * 60000);
+
+            // 定義非台東市區的偏鄉關鍵字 (若在此區域，則不適合接市區臨時單)
+            const remoteAreas = ['延平', '海端', '池上', '關山', '鹿野', '東河', '成功', '太麻里', '金峰', '大武', '達仁', '長濱', '武陵', '桃源', '紅葉', '都蘭', '初鹿', '嘉蘭', '歷坵', '金崙'];
+
+            let availableCarsData = {};
+            let count = 0;
+
+            Object.keys(allTripsData).forEach(carId => {
+                let trips = allTripsData[carId];
+                let isBusy = false;
+                let prevTrip = null;
+                let nextTrip = null;
+
+                // 1. 時間重疊檢查與前後趟次定位
+                for (let t of trips) {
+                    if (searchStart < t.end && searchEnd > t.start) {
+                        isBusy = true; // 時間撞期
+                        break;
+                    }
+                    if (t.end <= searchStart) {
+                        if (!prevTrip || t.end > prevTrip.end) prevTrip = t;
+                    }
+                    if (t.start >= searchEnd) {
+                        if (!nextTrip || t.start < nextTrip.start) nextTrip = t;
+                    }
+                }
+
+                if (!isBusy) {
+                    // 2. 空間防呆機制：確保車輛不會被困在偏鄉
+                    let isTooFar = false;
+                    if (prevTrip) {
+                        if (remoteAreas.some(area => prevTrip.to.includes(area))) isTooFar = true;
+                    }
+                    if (nextTrip) {
+                        if (remoteAreas.some(area => nextTrip.from.includes(area))) isTooFar = true;
+                    }
+
+                    if (!isTooFar) {
+                        availableCarsData[carId] = trips;
+                        count++;
+                    }
+                }
+            });
+
+            renderVehicleList(availableCarsData);
+            
+            let resultText = document.getElementById('searchResultText');
+            if (count > 0) {
+                resultText.innerHTML = `✅ 找到 ${count} 台 [市區附近且具備完整空檔] 的車輛`;
+                resultText.style.color = '#27ae60';
+            } else {
+                resultText.innerHTML = `❌ 在此時段，市區附近無足夠空檔的車輛`;
+                resultText.style.color = '#e74c3c';
+            }
+        });
+
+        document.getElementById('btnReset').addEventListener('click', () => {
+            if (!allTripsData) return;
+            document.getElementById('searchTime').value = '';
+            document.getElementById('searchResultText').innerHTML = '';
+            renderVehicleList(allTripsData); 
         });
 
         function renderVehicleList(data) {
@@ -271,8 +385,14 @@
                     
                     tripDiv.style.left = `${leftPct}%`;
                     tripDiv.style.width = `${Math.max(widthPct, 1)}%`; 
-                    tripDiv.style.top = `${laneIndex * 35 + 5}px`; 
-                    tripDiv.innerHTML = `${formatTimeHHMM(t.start)}<br>${t.from}`;
+                    tripDiv.style.top = `${laneIndex * 45 + 5}px`; // 加高以容納個案編號
+                    
+                    // ★ UI 升級：明確顯示個案編號
+                    let nameColor = laneIndex > 0 ? '#f1c40f' : '#f39c12'; // 共乘(下層)用亮黃，一般用橘黃
+                    tripDiv.innerHTML = `<span style="color:${nameColor}; font-weight:bold; font-size:12px;">案: ${t.nam}</span><span>${formatTimeHHMM(t.start)} ${t.from.substring(0,4)}..</span>`;
+                    
+                    // 加上詳細的 Hover Title
+                    tripDiv.title = `個案編號: ${t.nam}\n時間: ${formatTimeHHMM(t.start)} ~ ${formatTimeHHMM(t.end)}\n起: ${t.from}\n迄: ${t.to}`;
 
                     if (laneIndex > 0) {
                         tripDiv.style.backgroundColor = '#9b59b6'; 
@@ -281,7 +401,7 @@
                     
                     tripDiv.addEventListener('click', async (e) => {
                         e.stopPropagation();
-                        showTripInfoCard(carId, t.start, t.end, t.from, t.to, '載客');
+                        showTripInfoCard(carId, t.start, t.end, t.from, t.to, '載客', t.nam); // 傳入個案
                         await updateMapWithTrips([t], true); 
                     });
 
@@ -299,12 +419,12 @@
                             idleDiv.style.left = `${idleLeft}%`;
                             idleDiv.style.width = `${idleWidth}%`;
                             idleDiv.style.top = '5px';
-                            idleDiv.style.height = `${Math.max(lanes.length, 1) * 35 - 5}px`;
+                            idleDiv.style.height = `${Math.max(lanes.length, 1) * 45 - 5}px`; // 對應加高
                             idleDiv.innerHTML = `空趟 ${Math.round((nextStart - maxEndTimeSoFar)/60000)}分`;
 
                             idleDiv.addEventListener('click', (e) => {
                                 e.stopPropagation();
-                                showTripInfoCard(carId, maxEndTimeSoFar, nextStart, '待命中', '待命中', '空趟');
+                                showTripInfoCard(carId, maxEndTimeSoFar, nextStart, '待命中', '待命中', '空趟', '無');
                                 mapLayerGroup.clearLayers(); 
                             });
 
@@ -313,7 +433,7 @@
                     }
                 });
 
-                tl.style.height = `${Math.max(lanes.length, 1) * 35 + 10}px`;
+                tl.style.height = `${Math.max(lanes.length, 1) * 45 + 10}px`;
                 content.appendChild(tl);
                 card.appendChild(header);
                 card.appendChild(content);
@@ -337,26 +457,22 @@
             });
         }
 
-        // ★ 新增：繪製下半部儀表板與 Chart.js
         function renderGlobalDashboard(data) {
-            document.getElementById('bottom-dashboard').style.display = 'block'; // 顯示下半部
+            document.getElementById('bottom-dashboard').style.display = 'block'; 
             
             let totalCars = Object.keys(data).length;
-            let expectedTotalMs = totalCars * 8 * 60 * 60 * 1000; // 基準：每車 8 小時
+            let expectedTotalMs = totalCars * 8 * 60 * 60 * 1000; 
             let trueActiveMs = 0;
             let activeChartData = [];
             let idleChartData = [];
 
-            // 處理每台車的資料，過濾共乘重疊，計算真正行駛時間並生成圖表資料
             Object.keys(data).sort((a,b) => Number(a) - Number(b)).forEach(carId => {
                 let trips = data[carId];
                 let carLabel = `車號 ${carId}`;
                 let maxEndTimeSoFar = globalMinTime;
 
-                // 1. 為了畫圖：直接放入 Chart.js 資料集
                 trips.forEach((t, i) => {
-                    activeChartData.push({ x: [t.start.getTime(), t.end.getTime()], y: carLabel });
-                    
+                    activeChartData.push({ x: [t.start.getTime(), t.end.getTime()], y: carLabel, nam: t.nam });
                     if (t.end > maxEndTimeSoFar) maxEndTimeSoFar = t.end;
                     if (i < trips.length - 1) {
                         let nextStart = trips[i+1].start;
@@ -366,7 +482,6 @@
                     }
                 });
 
-                // 2. 為了算精確時數：合併有重疊時間的任務 (解決共乘導致時數重複計算的問題)
                 let mergedTrips = [];
                 trips.forEach(t => {
                     if (mergedTrips.length === 0) {
@@ -374,23 +489,19 @@
                     } else {
                         let last = mergedTrips[mergedTrips.length - 1];
                         if (t.start.getTime() <= last.e) {
-                            last.e = Math.max(last.e, t.end.getTime()); // 取最大結束時間
+                            last.e = Math.max(last.e, t.end.getTime()); 
                         } else {
                             mergedTrips.push({ s: t.start.getTime(), e: t.end.getTime() });
                         }
                     }
                 });
-                
-                // 加總該車真實引擎運轉時間
                 mergedTrips.forEach(m => { trueActiveMs += (m.e - m.s); });
             });
 
-            // 計算統計數據
             let totalIdleMs = Math.max(0, expectedTotalMs - trueActiveMs);
             let activeRatio = ((trueActiveMs / expectedTotalMs) * 100).toFixed(1);
-            let avgIdleHours = (totalIdleMs / totalCars / 3600000).toFixed(1); // 換算成小時
+            let avgIdleHours = (totalIdleMs / totalCars / 3600000).toFixed(1); 
 
-            // 渲染統計方塊
             const statsContainer = document.getElementById('statsContainer');
             statsContainer.innerHTML = `
                 <div class="stat-box">
@@ -407,9 +518,7 @@
                 </div>
             `;
 
-            // 渲染 Chart.js 碎塊化時間軸對比圖
             if (globalChartInstance) globalChartInstance.destroy();
-            
             globalChartInstance = new Chart(document.getElementById('globalChart').getContext('2d'), {
                 type: 'bar',
                 data: {
@@ -429,7 +538,8 @@
                                     let start = new Date(context.raw.x[0]);
                                     let end = new Date(context.raw.x[1]);
                                     let mins = Math.round((end - start) / 60000);
-                                    return `${context.dataset.label}: ${formatTimeHHMM(start)}~${formatTimeHHMM(end)} (${mins} 分鐘)`;
+                                    let namStr = context.raw.nam ? ` [案: ${context.raw.nam}]` : '';
+                                    return `${context.dataset.label}${namStr}: ${formatTimeHHMM(start)}~${formatTimeHHMM(end)} (${mins} 分鐘)`;
                                 }
                             }
                         }
@@ -448,7 +558,8 @@
             });
         }
 
-        function showTripInfoCard(carId, start, end, from, to, type) {
+        // ★ UI 升級：資訊卡加入個案編號
+        function showTripInfoCard(carId, start, end, from, to, type, nam) {
             const card = document.getElementById('trip-info-card');
             const content = document.getElementById('trip-info-content');
             let color = type === '載客' ? '#3498db' : '#e74c3c';
@@ -456,7 +567,9 @@
             
             card.style.display = 'block';
             content.innerHTML = `
-                <strong>🚗 車號：</strong> <span style="font-size:18px;">${carId}</span> <span style="margin-left:10px; padding:3px 10px; border-radius:12px; font-size:13px; background-color:${color}; color:white;">${type}</span><br>
+                <strong>🚗 車號：</strong> <span style="font-size:18px;">${carId}</span> 
+                <span style="margin-left:10px; padding:3px 10px; border-radius:12px; font-size:13px; background-color:${color}; color:white;">${type}</span>
+                <span style="margin-left:10px; color:#f39c12; font-weight:bold; font-size:15px;">[個案: ${nam}]</span><br>
                 <strong style="color:#d35400;">⏰ 時間：</strong> ${formatTimeHHMM(start)} ~ ${formatTimeHHMM(end)} <span style="color:#7f8c8d; font-size:14px;">(約 ${duration} 分鐘)</span><br>
                 <strong style="color:#27ae60;">🟢 上車：</strong> ${from}<br>
                 <strong style="color:#e74c3c;">🔴 下車：</strong> ${to}
